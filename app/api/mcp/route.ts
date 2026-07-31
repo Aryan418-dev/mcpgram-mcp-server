@@ -4,7 +4,7 @@
  * URL: https://<deployment>/api/mcp  (and /mcp via rewrite)
  * Auth: Authorization: Bearer <MCPGRAM_API_KEY>
  */
-import { handleMcpHttpRequest } from "../../../src/transport/http";
+import { handleMcpHttpRequest } from "@/transport/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
