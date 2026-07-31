@@ -12,6 +12,7 @@ import {
 } from "../middleware/auth.js";
 import { globalRateLimiter } from "../middleware/rate-limit.js";
 import { logger } from "../logger.js";
+import { publicBaseUrl, resourceUrl } from "../oauth/config.js";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,17 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Expose-Headers": "Mcp-Session-Id",
 };
 
-function jsonError(status: number, message: string, code = -32000): Response {
+function wwwAuthenticate(req: Request): string {
+  const meta = `${publicBaseUrl(req)}/.well-known/oauth-protected-resource`;
+  return `Bearer realm="mcpgram", resource_metadata="${meta}"`;
+}
+
+function jsonError(
+  status: number,
+  message: string,
+  code = -32000,
+  extraHeaders: Record<string, string> = {}
+): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
@@ -33,6 +44,7 @@ function jsonError(status: number, message: string, code = -32000): Response {
       headers: {
         "Content-Type": "application/json",
         ...CORS_HEADERS,
+        ...extraHeaders,
       },
     }
   );
@@ -40,7 +52,7 @@ function jsonError(status: number, message: string, code = -32000): Response {
 
 /**
  * Handle one MCP Streamable HTTP request (GET / POST / DELETE / OPTIONS).
- * Auth: Authorization: Bearer <MCPGRAM_API_KEY>
+ * Auth: OAuth access token OR Authorization: Bearer <MCPGRAM_API_KEY>
  */
 export async function handleMcpHttpRequest(req: Request): Promise<Response> {
   const started = Date.now();
@@ -54,10 +66,18 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
   }
 
   if (method === "GET" && url.searchParams.get("health") === "1") {
-    return new Response(JSON.stringify({ ok: true, service: "mcpgram-mcp" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-    });
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        service: "mcpgram-mcp",
+        resource: resourceUrl(req),
+        oauth: true,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+      }
+    );
   }
 
   let apiKey: string;
@@ -65,11 +85,11 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
     const token = extractBearerToken(req);
     if (!token) {
       throw new AuthError(
-        "Missing Authorization header. Use: Authorization: Bearer <MCPGRAM_API_KEY>"
+        "Missing Authorization header. Complete OAuth or use Bearer API key."
       );
     }
 
-    const rl = globalRateLimiter.check(token);
+    const rl = globalRateLimiter.check(token.slice(0, 32));
     if (!rl.allowed) {
       return new Response(
         JSON.stringify({
@@ -95,7 +115,9 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
     apiKey = await authenticateRequest(req);
   } catch (err) {
     if (err instanceof AuthError) {
-      return jsonError(err.status, err.message, -32001);
+      return jsonError(err.status, err.message, -32001, {
+        "WWW-Authenticate": wwwAuthenticate(req),
+      });
     }
     const message = err instanceof Error ? err.message : String(err);
     logger.error("Auth middleware failed", { message });

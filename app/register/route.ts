@@ -1,0 +1,60 @@
+import { registerClient } from "../../src/oauth/clients";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+/** RFC 7591 Dynamic Client Registration — required by Claude.ai. */
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as {
+      redirect_uris?: string[];
+      client_name?: string;
+      token_endpoint_auth_method?: string;
+      grant_types?: string[];
+      response_types?: string[];
+    };
+
+    if (!body.redirect_uris?.length) {
+      return Response.json(
+        { error: "invalid_client_metadata", error_description: "redirect_uris required" },
+        { status: 400, headers: CORS }
+      );
+    }
+
+    const reg = registerClient({
+      redirect_uris: body.redirect_uris,
+      client_name: body.client_name ?? "Claude",
+      token_endpoint_auth_method: body.token_endpoint_auth_method ?? "none",
+    });
+
+    return Response.json(
+      {
+        client_id: reg.client_id,
+        client_id_issued_at: reg.client_id_issued_at,
+        client_secret_expires_at: 0,
+        redirect_uris: reg.redirect_uris,
+        grant_types: body.grant_types ?? ["authorization_code", "refresh_token"],
+        response_types: body.response_types ?? ["code"],
+        token_endpoint_auth_method: body.token_endpoint_auth_method ?? "none",
+        client_name: body.client_name ?? "Claude",
+      },
+      { status: 201, headers: { "Content-Type": "application/json", ...CORS } }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json(
+      { error: "server_error", error_description: message },
+      { status: 500, headers: CORS }
+    );
+  }
+}

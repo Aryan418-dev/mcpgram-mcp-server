@@ -5,7 +5,9 @@ const CODE_TTL_SEC = 120;
 const ACCESS_TTL_SEC = 3600;
 const REFRESH_TTL_SEC = 30 * 24 * 3600;
 
-export function issueAuthCode(input: Omit<AuthCodeRecord, "typ" | "code_id" | "exp">): string {
+export function issueAuthCode(
+  input: Omit<AuthCodeRecord, "typ" | "code_id" | "exp">
+): string {
   const now = Math.floor(Date.now() / 1000);
   const record: AuthCodeRecord = {
     typ: "code",

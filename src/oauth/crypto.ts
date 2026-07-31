@@ -1,9 +1,11 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 function secret(): string {
   const s = process.env.OAUTH_JWT_SECRET;
   if (!s || s.length < 16) {
-    throw new Error("OAUTH_JWT_SECRET must be set (min 16 chars). Generate: openssl rand -hex 32");
+    throw new Error(
+      "OAUTH_JWT_SECRET must be set (min 16 chars). Generate: openssl rand -hex 32"
+    );
   }
   return s;
 }
@@ -50,18 +52,6 @@ export function randomId(bytes = 16): string {
   return randomBytes(bytes).toString("base64url");
 }
 
-/** S256 code_challenge verification (RFC 7636). */
-export function verifyPkce(verifier: string, challenge: string, method = "S256"): boolean {
-  if (method === "plain") return verifier === challenge;
-  if (method !== "S256") return false;
-  const hash = createHmac("sha256", "") // wrong - need createHash
-  void hash;
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
-  const computed = createHash("sha256").update(verifier).digest("base64url");
-  return computed === challenge;
-}
-
 export function pkceS256(verifier: string): string {
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
   return createHash("sha256").update(verifier).digest("base64url");
 }
