@@ -2,118 +2,62 @@
 
 Official **Model Context Protocol (MCP)** server for [MCPGRAM](https://mcpgram.vercel.app).
 
-Supports **two transports**:
+| Transport | Use case |
+|-----------|----------|
+| **stdio** | Claude Desktop, Cursor local |
+| **Streamable HTTP + OAuth 2.1** | Claude.ai custom connectors |
 
-| Transport | Use case | Entry |
-|-----------|----------|-------|
-| **stdio** | Claude Desktop, Cursor local, Claude Code | `node dist/index.js` |
-| **Streamable HTTP** | Claude Chat remote, remote agents | `POST /mcp` |
+## Claude.ai custom connector (OAuth)
+
+1. Deploy this repo to Vercel.
+2. **Disable Vercel Deployment Protection** (Project → Settings → Deployment Protection → off). Claude must reach `/.well-known/*` without Vercel SSO.
+3. Set environment variables (see below).
+4. In Claude.ai → Settings → Connectors → **Add custom connector**
+   - URL: `https://<your-deployment>.vercel.app/mcp`
+   - Leave OAuth Client ID / Secret **empty** (Dynamic Client Registration is enabled).
+5. Click **Connect** → sign in with Google / GitHub / email (Supabase Auth) → pick workspace → Allow.
+
+### OAuth flow
 
 ```
-Local  ──stdio──► mcpgram-mcp-server ──HTTPS──► MCPGRAM API ──► connectors
-Remote ─HTTP/mcp► same server logic   ──HTTPS──► MCPGRAM API ──► connectors
+Claude.ai
+  → GET /.well-known/oauth-protected-resource
+  → GET /.well-known/oauth-authorization-server
+  → POST /register          (DCR)
+  → GET  /authorize         (Supabase login + consent)
+  → POST /token             (code + PKCE → access_token)
+  → POST /mcp               Authorization: Bearer <access_token>
 ```
 
-## Install
+No Vercel Authentication is used.
+
+## Environment variables
 
 ```bash
-git clone https://github.com/Aryan418-dev/mcpgram-mcp-server.git
-cd mcpgram-mcp-server
-npm install
-npm run build
+MCP_PUBLIC_URL=https://mcpgram-mcp-server.vercel.app
+OAUTH_JWT_SECRET=<openssl rand -hex 32>
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...   # creates workspace API keys after consent
+MCPGRAM_BASE_URL=https://mcpgram.vercel.app
 ```
 
-## Local stdio
+Supabase redirect URLs to allow:
+- `https://<mcp-server-host>/auth/callback`
 
-```bash
-export MCPGRAM_API_KEY=mcpg_live_...
-npm start
-```
-
-Claude Desktop / Cursor:
-
-```json
-{
-  "mcpServers": {
-    "mcpgram": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/mcpgram-mcp-server/dist/index.js"],
-      "env": { "MCPGRAM_API_KEY": "mcpg_live_YOUR_KEY" }
-    }
-  }
-}
-```
-
-## Local Streamable HTTP
-
-```bash
-npm run build && npm run start:http
-# http://127.0.0.1:3100/mcp
-curl -s 'http://127.0.0.1:3100/mcp?health=1'
-```
-
-Every request needs:
+## API key auth (still supported)
 
 ```http
 Authorization: Bearer mcpg_live_YOUR_KEY
 ```
 
-## Deploy on Vercel
+Works for Claude Code, Cursor headers, and local HTTP.
 
-1. Import this repo (Framework: **Next.js**).
-2. Optional env: `MCPGRAM_BASE_URL`, `MCPGRAM_RATE_LIMIT_MAX`.
-3. Deploy.
-
-Endpoints:
-
-- `https://<project>.vercel.app/mcp`
-- `https://<project>.vercel.app/api/mcp`
-
-### Claude Chat (remote MCP)
-
-- **URL:** `https://<deployment>.vercel.app/mcp`
-- **Header:** `Authorization: Bearer mcpg_live_YOUR_KEY`
-
-Flow: Claude Chat → `/mcp` → initialize → tools/list → tools/call → MCPGRAM → GitHub/Slack/Notion.
-
-### Cursor / HTTP clients
-
-```json
-{
-  "mcpServers": {
-    "mcpgram-remote": {
-      "url": "https://<deployment>.vercel.app/mcp",
-      "headers": { "Authorization": "Bearer mcpg_live_YOUR_KEY" }
-    }
-  }
-}
-```
-
-## Auth & multi-workspace
-
-- **stdio:** one process key = one workspace.
-- **HTTP:** Bearer token per request selects workspace (many keys, one deployment).
-
-Invalid key → 401. Rate limit → 429.
-
-## Scripts
+## Local stdio
 
 ```bash
-npm run build / start          # stdio
-npm run start:http / dev:http  # standalone HTTP
-npm run dev:next / build:next  # Next.js (Vercel)
-```
-
-## Layout
-
-```
-src/index.ts              # stdio
-src/http.ts               # standalone HTTP
-src/server.ts             # shared MCP factory
-src/transport/http.ts     # Streamable HTTP
-src/middleware/auth.ts
-src/middleware/rate-limit.ts
-app/api/mcp/route.ts      # Vercel route
+export MCPGRAM_API_KEY=mcpg_live_...
+npm run build:server && npm start
 ```
 
 ## License

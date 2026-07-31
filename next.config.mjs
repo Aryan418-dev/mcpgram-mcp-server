@@ -7,7 +7,6 @@ const nextConfig = {
     ];
   },
   webpack: (config) => {
-    // TypeScript ESM uses .js extensions in relative imports; map them to .ts
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js"],
       ".mjs": [".mts", ".mjs"],
