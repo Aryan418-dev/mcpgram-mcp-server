@@ -1,65 +1,51 @@
 # mcpgram-mcp-server
 
-Official **Model Context Protocol (MCP)** server for [MCPGRAM](https://mcpgram.vercel.app).
+Official MCP bridge for [MCPGRAM](https://mcpgram.vercel.app):
 
-| Transport | Use case |
-|-----------|----------|
-| **stdio** | Claude Desktop, Cursor local |
-| **Streamable HTTP + OAuth 2.1** | Claude.ai custom connectors |
+- **stdio** for local MCP clients
+- **Streamable HTTP** at `/mcp` (Vercel)
+- **Auth0** as OAuth authorization server for Claude.ai custom connectors
+- **API key** auth still supported (`Bearer mcpg_live_…`)
 
-## Claude.ai custom connector (OAuth)
-
-1. Deploy this repo to Vercel.
-2. **Disable Vercel Deployment Protection** (Project → Settings → Deployment Protection → off). Claude must reach `/.well-known/*` without Vercel SSO.
-3. Set environment variables (see below).
-4. In Claude.ai → Settings → Connectors → **Add custom connector**
-   - URL: `https://<your-deployment>.vercel.app/mcp`
-   - Leave OAuth Client ID / Secret **empty** (Dynamic Client Registration is enabled).
-5. Click **Connect** → sign in with Google / GitHub / email (Supabase Auth) → pick workspace → Allow.
-
-### OAuth flow
+## Architecture (Claude)
 
 ```
 Claude.ai
-  → GET /.well-known/oauth-protected-resource
-  → GET /.well-known/oauth-authorization-server
-  → POST /register          (DCR)
-  → GET  /authorize         (Supabase login + consent)
-  → POST /token             (code + PKCE → access_token)
-  → POST /mcp               Authorization: Bearer <access_token>
+   → GET /.well-known/oauth-protected-resource  (this server)
+   → authorization_servers = Auth0 tenant
+   → DCR + login + token  (Auth0)
+   → POST /mcp  Authorization: Bearer <Auth0 JWT>
+   → tools/list, tools/call → MCPGRAM API
 ```
 
-No Vercel Authentication is used.
+This deployment is a **resource server**. It does **not** host Claude’s login when Auth0 is configured.
 
-## Environment variables
+## Required env (Vercel)
 
-```bash
-MCP_PUBLIC_URL=https://mcpgram-mcp-server.vercel.app
-OAUTH_JWT_SECRET=<openssl rand -hex 32>
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...   # creates workspace API keys after consent
-MCPGRAM_BASE_URL=https://mcpgram.vercel.app
-```
+| Variable | Purpose |
+|----------|---------|
+| `MCP_PUBLIC_URL` | Public URL of this app, e.g. `https://mcpgram-mcp-server.vercel.app` |
+| `AUTH0_DOMAIN` | e.g. `your-tenant.us.auth0.com` |
+| `AUTH0_AUDIENCE` | Auth0 API identifier, must match resource e.g. `https://mcpgram-mcp-server.vercel.app/mcp` |
+| `MCPGRAM_OAUTH_API_KEY` | MCPGRAM workspace API key used after Auth0 login |
+| `MCPGRAM_BASE_URL` | MCPGRAM backend (default `https://mcpgram.vercel.app`) |
 
-Supabase redirect URLs to allow:
-- `https://<mcp-server-host>/auth/callback`
+## Claude.ai setup
 
-## API key auth (still supported)
-
-```http
-Authorization: Bearer mcpg_live_YOUR_KEY
-```
-
-Works for Claude Code, Cursor headers, and local HTTP.
+1. Configure Auth0 (API, DCR, Resource Parameter profile) — see project checklist.
+2. Set env vars above; redeploy.
+3. Disable Vercel Deployment Protection for this project.
+4. Claude → Settings → Connectors → Add custom connector:
+   - URL: `https://mcpgram-mcp-server.vercel.app/mcp`
+   - Leave Client ID / Secret empty (DCR via Auth0).
+5. Complete Auth0 login in the browser.
 
 ## Local stdio
 
 ```bash
-export MCPGRAM_API_KEY=mcpg_live_...
-npm run build:server && npm start
+MCPGRAM_API_KEY=mcpg_live_… npx mcpgram-mcp-server
 ```
 
-## License
+## Health
 
-MIT
+`GET /mcp?health=1` → `{ ok, auth0: true/false }`

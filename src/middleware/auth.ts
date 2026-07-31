@@ -1,6 +1,11 @@
 import { McpgramApi } from "../api.js";
 import { configFromApiKey } from "../config.js";
 import { logger } from "../logger.js";
+import {
+  apiKeyFromAuth0Claims,
+  isAuth0Configured,
+  verifyAuth0AccessToken,
+} from "../oauth/auth0.js";
 import { verifyAccessToken } from "../oauth/tokens.js";
 
 export class AuthError extends Error {
@@ -30,27 +35,51 @@ export function extractBearerToken(
 
 /**
  * Resolve Bearer token to a MCPGRAM API key.
- * Accepts:
- *  - Raw mcpg_live_* API keys
- *  - OAuth access tokens issued by this server (signed payload with api_key)
+ * Accepts (in order):
+ *  1. Raw mcpg_* API keys
+ *  2. Auth0 access tokens (JWKS) → MCPGRAM_OAUTH_API_KEY or claim mcpgram_api_key
+ *  3. Legacy homegrown OAuth tokens (signed payload with api_key)
  */
 export async function resolveApiKeyFromBearer(token: string): Promise<string> {
   if (!token || token.length < 8) {
     throw new AuthError("Missing or malformed Authorization Bearer token");
   }
 
-  // OAuth access token (our signed payload)
-  if (!token.startsWith("mcpg_")) {
-    try {
-      const claims = verifyAccessToken(token);
-      if (claims?.api_key) {
-        return claims.api_key;
+  // 1) Direct MCPGRAM API key
+  if (token.startsWith("mcpg_")) {
+    return validateApiKey(token);
+  }
+
+  // 2) Auth0 JWT
+  if (isAuth0Configured()) {
+    const claims = await verifyAuth0AccessToken(token);
+    if (claims) {
+      const key = apiKeyFromAuth0Claims(claims);
+      if (!key) {
+        logger.error(
+          "Auth0 token valid but MCPGRAM_OAUTH_API_KEY not set and no mcpgram_api_key claim"
+        );
+        throw new AuthError(
+          "Auth0 authenticated, but server has no MCPGRAM_OAUTH_API_KEY configured",
+          500
+        );
       }
-    } catch {
-      // fall through to API key validation
+      logger.info("Auth0 JWT accepted", { sub: claims.sub });
+      return key;
     }
   }
 
+  // 3) Legacy homegrown OAuth access token
+  try {
+    const claims = verifyAccessToken(token);
+    if (claims?.api_key) {
+      return claims.api_key;
+    }
+  } catch {
+    // fall through
+  }
+
+  // Last resort: treat as API key string
   return validateApiKey(token);
 }
 
@@ -74,7 +103,7 @@ export async function authenticateRequest(req: Request): Promise<string> {
   const token = extractBearerToken(req);
   if (!token) {
     throw new AuthError(
-      "Missing Authorization header. Use OAuth or Authorization: Bearer <MCPGRAM_API_KEY>"
+      "Missing Authorization header. Complete OAuth (Auth0) or use Bearer <MCPGRAM_API_KEY>"
     );
   }
   return resolveApiKeyFromBearer(token);
