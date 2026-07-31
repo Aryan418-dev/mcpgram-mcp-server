@@ -2,16 +2,16 @@
  * Streamable HTTP transport for remote MCP clients.
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { createMcpServer } from "../server.js";
-import { configFromApiKey } from "../config.js";
+import { createMcpServer } from "@/server";
+import { configFromApiKey } from "@/config";
 import {
   authenticateRequest,
   AuthError,
   extractBearerToken,
-} from "../middleware/auth.js";
-import { globalRateLimiter } from "../middleware/rate-limit.js";
-import { logger } from "../logger.js";
-import { publicBaseUrl, resourceUrl } from "../oauth/config.js";
+} from "@/middleware/auth";
+import { globalRateLimiter } from "@/middleware/rate-limit";
+import { logger } from "@/logger";
+import { publicBaseUrl, resourceUrl } from "@/oauth/config";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
