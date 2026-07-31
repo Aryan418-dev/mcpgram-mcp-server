@@ -34,10 +34,15 @@ function generateApiKey(): { raw: string; hash: string; prefix: string } {
 
 export type WorkspaceRow = { id: string; name: string };
 
+type MemberJoinRow = {
+  workspace_id: string;
+  workspaces: { id: string; name: string } | { id: string; name: string }[] | null;
+};
+
 /** List workspaces the user owns/members. */
 export async function listUserWorkspaces(userId: string): Promise<WorkspaceRow[]> {
   const admin = createServiceClient();
-  // Prefer workspace_members if present; fall back to workspaces.owner_id
+
   const { data: members } = await admin
     .from("workspace_members")
     .select("workspace_id, workspaces(id, name)")
@@ -45,9 +50,15 @@ export async function listUserWorkspaces(userId: string): Promise<WorkspaceRow[]
 
   if (members && members.length > 0) {
     const out: WorkspaceRow[] = [];
-    for (const m of members as Array<{ workspace_id: string; workspaces: { id: string; name: string } | null }>) {
-      if (m.workspaces) out.push({ id: m.workspaces.id, name: m.workspaces.name });
-      else out.push({ id: m.workspace_id, name: m.workspace_id });
+    for (const raw of members as unknown as MemberJoinRow[]) {
+      const ws = raw.workspaces;
+      if (Array.isArray(ws) && ws[0]) {
+        out.push({ id: ws[0].id, name: ws[0].name });
+      } else if (ws && !Array.isArray(ws)) {
+        out.push({ id: ws.id, name: ws.name });
+      } else {
+        out.push({ id: raw.workspace_id, name: raw.workspace_id });
+      }
     }
     if (out.length) return out;
   }
@@ -57,7 +68,11 @@ export async function listUserWorkspaces(userId: string): Promise<WorkspaceRow[]
     .select("id, name")
     .eq("owner_id", userId);
 
-  return (owned as WorkspaceRow[] | null) ?? [];
+  if (!owned) return [];
+  return owned.map((w: { id: string; name: string }) => ({
+    id: w.id,
+    name: w.name,
+  }));
 }
 
 /**
