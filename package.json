@@ -11,10 +11,10 @@
     "dev": "tsx src/index.ts",
     "dev:http": "tsx src/http.ts",
     "build": "next build",
-    "build:server": "tsc",
+    "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/index.js",
     "start:http": "node dist/http.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit",
     "dev:next": "next dev"
   },
   "engines": {
