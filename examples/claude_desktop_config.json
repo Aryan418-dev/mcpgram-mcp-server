@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mcpgram": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/mcpgram-mcp-server/dist/index.js"],
+      "env": {
+        "MCPGRAM_API_KEY": "YOUR_API_KEY"
+      }
+    }
+  }
+}
