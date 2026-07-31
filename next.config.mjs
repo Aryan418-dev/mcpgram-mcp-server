@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ["@modelcontextprotocol/sdk"],
   async rewrites() {
     return [
       { source: "/mcp", destination: "/api/mcp" },
@@ -8,8 +9,8 @@ const nextConfig = {
   },
   webpack: (config) => {
     config.resolve.extensionAlias = {
-      ".js": [".ts", ".tsx", ".js"],
-      ".mjs": [".mts", ".mjs"],
+      ".js": [".js", ".ts", ".tsx"],
+      ".mjs": [".mjs", ".mts"],
     };
     return config;
   },
