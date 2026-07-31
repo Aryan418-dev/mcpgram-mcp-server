@@ -22,9 +22,6 @@ function isRetryable(status: number): boolean {
   return status === 429 || status === 502 || status === 503 || status === 504;
 }
 
-/**
- * Thin HTTP client for MCPGRAM public API with retries on transient failures.
- */
 export class McpgramApi {
   constructor(private readonly config: Config) {}
 
@@ -109,5 +106,16 @@ export class McpgramApi {
 
   execute(req: ExecuteRequest): Promise<ExecuteResponse> {
     return this.request<ExecuteResponse>("POST", "/api/v1/execute", req);
+  }
+
+  /** Auth probe — returns false only on HTTP 401. */
+  async validateKey(): Promise<boolean> {
+    try {
+      await this.listTools();
+      return true;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return false;
+      return true;
+    }
   }
 }
