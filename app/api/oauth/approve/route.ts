@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { loadClient, clientAllowsRedirect } from "../../../../src/oauth/clients";
 import { issueAuthCode } from "../../../../src/oauth/tokens";
 import { issueWorkspaceApiKey } from "../../../../src/oauth/supabase";
+import { publicBaseUrl } from "../../../../src/oauth/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
       code_challenge_method?: string;
       scope?: string;
       workspace_id: string;
+      resource?: string;
     };
 
     const sb = createClient(
@@ -36,10 +38,10 @@ export async function POST(req: Request) {
     const client = loadClient(body.client_id);
     if (!client) return Response.json({ error: "Unknown client_id" }, { status: 400 });
     if (!clientAllowsRedirect(client, body.redirect_uri)) {
-      return Response.json({ error: "redirect_uri not registered" }, { status: 400 });
+      return Response.json({ error: "redirect_uri not registered for this client" }, { status: 400 });
     }
     if (!body.code_challenge) {
-      return Response.json({ error: "code_challenge required" }, { status: 400 });
+      return Response.json({ error: "code_challenge required (PKCE)" }, { status: 400 });
     }
     if (!body.workspace_id) {
       return Response.json({ error: "workspace_id required" }, { status: 400 });
@@ -64,6 +66,8 @@ export async function POST(req: Request) {
     const redirect = new URL(body.redirect_uri);
     redirect.searchParams.set("code", code);
     if (body.state) redirect.searchParams.set("state", body.state);
+    // RFC 9207 iss parameter helps clients validate the AS
+    redirect.searchParams.set("iss", publicBaseUrl(req));
 
     return Response.json({ redirect: redirect.toString() });
   } catch (err) {

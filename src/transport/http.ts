@@ -1,6 +1,5 @@
 /**
  * Streamable HTTP transport for remote MCP clients.
- * Uses official WebStandardStreamableHTTPServerTransport (SDK v1).
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "../server.js";
@@ -19,11 +18,12 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Accept",
-  "Access-Control-Expose-Headers": "Mcp-Session-Id",
+  "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
 };
 
+/** RFC 9728 §5.1 — path-aware PRM for resource …/mcp */
 function wwwAuthenticate(req: Request): string {
-  const meta = `${publicBaseUrl(req)}/.well-known/oauth-protected-resource`;
+  const meta = `${publicBaseUrl(req)}/.well-known/oauth-protected-resource/mcp`;
   return `Bearer realm="mcpgram", resource_metadata="${meta}"`;
 }
 
@@ -50,10 +50,6 @@ function jsonError(
   );
 }
 
-/**
- * Handle one MCP Streamable HTTP request (GET / POST / DELETE / OPTIONS).
- * Auth: OAuth access token OR Authorization: Bearer <MCPGRAM_API_KEY>
- */
 export async function handleMcpHttpRequest(req: Request): Promise<Response> {
   const started = Date.now();
   const method = req.method.toUpperCase();

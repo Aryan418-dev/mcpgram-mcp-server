@@ -13,15 +13,26 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-/** RFC 7591 Dynamic Client Registration — required by Claude.ai. */
+/** RFC 7591 Dynamic Client Registration — Claude.ai uses this. */
 export async function POST(req: Request) {
   try {
+    if (!process.env.OAUTH_JWT_SECRET || process.env.OAUTH_JWT_SECRET.length < 16) {
+      return Response.json(
+        {
+          error: "server_error",
+          error_description: "OAUTH_JWT_SECRET is not configured on the server",
+        },
+        { status: 500, headers: CORS }
+      );
+    }
+
     const body = (await req.json()) as {
       redirect_uris?: string[];
       client_name?: string;
       token_endpoint_auth_method?: string;
       grant_types?: string[];
       response_types?: string[];
+      scope?: string;
     };
 
     if (!body.redirect_uris?.length) {
@@ -47,6 +58,7 @@ export async function POST(req: Request) {
         response_types: body.response_types ?? ["code"],
         token_endpoint_auth_method: body.token_endpoint_auth_method ?? "none",
         client_name: body.client_name ?? "Claude",
+        scope: body.scope ?? "mcp offline_access",
       },
       { status: 201, headers: { "Content-Type": "application/json", ...CORS } }
     );
