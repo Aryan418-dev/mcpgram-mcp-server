@@ -1,7 +1,7 @@
 {
   "name": "mcpgram-mcp-server",
-  "version": "1.0.0",
-  "description": "Official MCP server for MCPGRAM — exposes all workspace connectors and tools to Claude Desktop, Cursor, VS Code, OpenCode, OpenClaw, and any MCP client.",
+  "version": "1.1.0",
+  "description": "Official MCP server for MCPGRAM — stdio + Streamable HTTP (remote) bridge to workspace tools",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,28 +9,29 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/http.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "start:http": "node dist/http.js",
+    "typecheck": "tsc --noEmit",
+    "build:next": "next build",
+    "dev:next": "next dev"
   },
   "engines": {
     "node": ">=18"
   },
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "mcpgram",
-    "claude",
-    "cursor",
-    "ai-agents"
-  ],
+  "keywords": ["mcp", "model-context-protocol", "mcpgram", "streamable-http"],
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.14.15",
+    "@types/react": "18.3.3",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }
