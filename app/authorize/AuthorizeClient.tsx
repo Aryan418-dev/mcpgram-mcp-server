@@ -9,13 +9,15 @@ type Props = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   clientName: string;
+  /** Optional logo URL for the connecting app (e.g. Claude). */
+  clientLogoUrl?: string | null;
 };
 
 type Workspace = { id: string; name: string };
 
 const MCPGRAM_LOGO = "/logo-on-dark.png";
 
-export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Props) {
+export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clientLogoUrl }: Props) {
   const sp = useSearchParams();
   const params = useMemo(
     () => ({
@@ -43,6 +45,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
   const [sessionReady, setSessionReady] = useState(false);
   const [success, setSuccess] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   function sb(): SupabaseClient {
     return createClient(supabaseUrl, supabaseAnonKey);
@@ -259,7 +262,19 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
 
       <div style={styles.header}>
         <div style={styles.logoBox} title={appName}>
-          <div style={styles.clientInitial}>{appName.slice(0, 1).toUpperCase()}</div>
+          {clientLogoUrl && !logoFailed ? (
+            <img
+              src={clientLogoUrl}
+              alt={appName}
+              width={36}
+              height={36}
+              style={{ display: "block", objectFit: "contain", borderRadius: 10 }}
+              onError={() => setLogoFailed(true)}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div style={styles.clientInitial}>{appName.slice(0, 1).toUpperCase()}</div>
+          )}
         </div>
 
         <div style={styles.connector} aria-hidden>
