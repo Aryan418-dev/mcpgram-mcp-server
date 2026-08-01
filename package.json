@@ -1,6 +1,6 @@
 {
   "name": "mcpgram-mcp-server",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Official MCP server for MCPGRAM - stdio + Streamable HTTP + built-in OAuth 2.1 for Claude.ai",
   "type": "module",
   "main": "dist/index.js",
