@@ -43,8 +43,6 @@ export type Auth0Claims = JWTPayload & {
   scope?: string;
   permissions?: string[];
   email?: string;
-  /** Optional custom claim if you add it in Auth0 Actions */
-  mcpgram_api_key?: string;
 };
 
 /**
@@ -52,7 +50,6 @@ export type Auth0Claims = JWTPayload & {
  */
 export async function verifyAuth0AccessToken(token: string): Promise<Auth0Claims | null> {
   if (!isAuth0Configured()) return null;
-  // Compact JWT has 3 segments
   if (token.split(".").length !== 3) return null;
 
   const issuer = auth0IssuerWithSlash();
@@ -67,7 +64,6 @@ export async function verifyAuth0AccessToken(token: string): Promise<Auth0Claims
     if (!payload.sub) return null;
     return payload as Auth0Claims;
   } catch {
-    // Try issuer without trailing slash (some tenants)
     try {
       const base = auth0Issuer();
       if (!base) return null;
@@ -81,17 +77,4 @@ export async function verifyAuth0AccessToken(token: string): Promise<Auth0Claims
       return null;
     }
   }
-}
-
-/**
- * API key used after a successful Auth0 login (workspace key for Claude).
- * Prefer custom claim mcpgram_api_key, else MCPGRAM_OAUTH_API_KEY env.
- */
-export function apiKeyFromAuth0Claims(claims: Auth0Claims): string | null {
-  if (typeof claims.mcpgram_api_key === "string" && claims.mcpgram_api_key.length > 8) {
-    return claims.mcpgram_api_key;
-  }
-  const envKey = process.env.MCPGRAM_OAUTH_API_KEY?.trim();
-  if (envKey && envKey.length > 8) return envKey;
-  return null;
 }

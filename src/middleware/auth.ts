@@ -1,11 +1,8 @@
 import { McpgramApi } from "../api.js";
 import { configFromApiKey } from "../config.js";
 import { logger } from "../logger.js";
-import {
-  apiKeyFromAuth0Claims,
-  isAuth0Configured,
-  verifyAuth0AccessToken,
-} from "../oauth/auth0.js";
+import { isAuth0Configured, verifyAuth0AccessToken } from "../oauth/auth0.js";
+import { resolveApiKeyFromAuth0 } from "../oauth/resolve-user.js";
 import { verifyAccessToken } from "../oauth/tokens.js";
 
 export class AuthError extends Error {
@@ -35,41 +32,37 @@ export function extractBearerToken(
 
 /**
  * Resolve Bearer token to a MCPGRAM API key.
- * Accepts (in order):
- *  1. Raw mcpg_* API keys
- *  2. Auth0 access tokens (JWKS) → MCPGRAM_OAUTH_API_KEY or claim mcpgram_api_key
- *  3. Legacy homegrown OAuth tokens (signed payload with api_key)
+ * 1. Raw mcpg_* API keys (stdio / direct)
+ * 2. Auth0 JWT → per-user workspace API key (never a global env key)
+ * 3. Legacy homegrown OAuth tokens
  */
 export async function resolveApiKeyFromBearer(token: string): Promise<string> {
   if (!token || token.length < 8) {
     throw new AuthError("Missing or malformed Authorization Bearer token");
   }
 
-  // 1) Direct MCPGRAM API key
   if (token.startsWith("mcpg_")) {
     return validateApiKey(token);
   }
 
-  // 2) Auth0 JWT
   if (isAuth0Configured()) {
     const claims = await verifyAuth0AccessToken(token);
     if (claims) {
-      const key = apiKeyFromAuth0Claims(claims);
-      if (!key) {
-        logger.error(
-          "Auth0 token valid but MCPGRAM_OAUTH_API_KEY not set and no mcpgram_api_key claim"
+      try {
+        const { apiKey, userId, workspaceId } = await resolveApiKeyFromAuth0(
+          claims,
+          token
         );
-        throw new AuthError(
-          "Auth0 authenticated, but server has no MCPGRAM_OAUTH_API_KEY configured",
-          500
-        );
+        logger.info("Auth0 JWT → workspace key", { userId, workspaceId });
+        return apiKey;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error("Auth0 workspace resolution failed", { message });
+        throw new AuthError(`Workspace resolution failed: ${message}`, 403);
       }
-      logger.info("Auth0 JWT accepted", { sub: claims.sub });
-      return key;
     }
   }
 
-  // 3) Legacy homegrown OAuth access token
   try {
     const claims = verifyAccessToken(token);
     if (claims?.api_key) {
@@ -79,11 +72,9 @@ export async function resolveApiKeyFromBearer(token: string): Promise<string> {
     // fall through
   }
 
-  // Last resort: treat as API key string
   return validateApiKey(token);
 }
 
-/** Validate MCPGRAM API key against the live API. */
 export async function validateApiKey(apiKey: string): Promise<string> {
   if (!apiKey || apiKey.length < 8) {
     throw new AuthError("Missing or malformed Authorization Bearer token");
@@ -98,7 +89,6 @@ export async function validateApiKey(apiKey: string): Promise<string> {
   return apiKey;
 }
 
-/** Authenticate an incoming HTTP Request → MCPGRAM API key. */
 export async function authenticateRequest(req: Request): Promise<string> {
   const token = extractBearerToken(req);
   if (!token) {
