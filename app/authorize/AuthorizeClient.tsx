@@ -36,7 +36,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
   const [password, setPassword] = useState("");
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -81,7 +81,11 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
       const json = (await res.json()) as { workspaces: Workspace[] };
       const list = json.workspaces ?? [];
       setWorkspaces(list);
-      setSelectedIds(list.map((w) => w.id));
+      const init: Record<string, boolean> = {};
+      for (const w of list) {
+        if (w?.id != null) init[String(w.id)] = true;
+      }
+      setSelected(init);
     })();
   }, [user]);
 
@@ -93,20 +97,24 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
     return () => window.clearTimeout(t);
   }, [success, redirectUrl]);
 
+  const selectedIds = workspaces.map((w) => String(w.id)).filter((id) => selected[id]);
   const allSelected = workspaces.length > 0 && selectedIds.length === workspaces.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
 
   function toggleAll() {
     if (success) return;
-    setSelectedIds(allSelected ? [] : workspaces.map((w) => w.id));
+    const next: Record<string, boolean> = {};
+    const value = !allSelected;
+    for (const w of workspaces) {
+      if (w?.id != null) next[String(w.id)] = value;
+    }
+    setSelected(next);
   }
 
   function toggleOne(id: string) {
     if (success) return;
-    setSelectedIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      return [...prev, id];
-    });
+    const key = String(id);
+    setSelected((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   async function signInEmail(e: React.FormEvent) {
@@ -147,7 +155,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
       setBusy(false);
       return;
     }
-    const workspace_ids = workspaces.filter((w) => selectedIds.includes(w.id)).map((w) => w.id);
+    const workspace_ids = workspaces.map((w) => String(w.id)).filter((id) => selected[id]);
     const res = await fetch("/api/oauth/approve", {
       method: "POST",
       headers: {
@@ -333,39 +341,55 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
             ) : (
               <div style={styles.checkboxList} role="group" aria-label="Workspaces">
                 {workspaces.map((w) => {
-                  const checked = selectedIds.includes(w.id);
-                  const inputId = `ws-${w.id}`;
+                  const id = String(w.id);
+                  const checked = !!selected[id];
                   return (
-                    <label
-                      key={w.id}
-                      htmlFor={inputId}
+                    <div
+                      key={id}
+                      role="checkbox"
+                      aria-checked={checked}
+                      tabIndex={0}
+                      onClick={() => toggleOne(id)}
+                      onKeyDown={(e) => {
+                        if (e.key === " " || e.key === "Enter") {
+                          e.preventDefault();
+                          toggleOne(id);
+                        }
+                      }}
                       style={{
                         ...styles.wsRow,
                         borderColor: checked ? "#FFFFFF" : "#2A2A2A",
                         background: checked ? "#1a1a1a" : "transparent",
                         cursor: success ? "default" : "pointer",
+                        userSelect: "none",
                       }}
                     >
-                      <input
-                        id={inputId}
-                        type="checkbox"
-                        checked={checked}
-                        disabled={success}
-                        onChange={() => toggleOne(w.id)}
+                      <span
+                        aria-hidden
                         style={{
-                          width: 18,
-                          height: 18,
-                          marginTop: 2,
+                          width: 20,
+                          height: 20,
+                          borderRadius: 6,
+                          border: checked ? "1.5px solid #FFFFFF" : "1.5px solid #2A2A2A",
+                          background: checked ? "#FFFFFF" : "#000000",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                           flexShrink: 0,
-                          accentColor: "#FFFFFF",
-                          cursor: success ? "default" : "pointer",
+                          marginTop: 1,
                         }}
-                      />
-                      <span style={{ textAlign: "left", flex: 1 }}>
-                        <span style={{ color: "#FFFFFF", fontWeight: 500, display: "block" }}>{w.name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "#6b6b6b", marginTop: 2 }}>{w.id}</span>
+                      >
+                        {checked ? (
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2.5 6.5L5 9L9.5 3.5" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
                       </span>
-                    </label>
+                      <span style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+                        <span style={{ color: "#FFFFFF", fontWeight: 500, display: "block" }}>{w.name}</span>
+                        <span style={{ display: "block", fontSize: 11, color: "#6b6b6b", marginTop: 2, wordBreak: "break-all" }}>{id}</span>
+                      </span>
+                    </div>
                   );
                 })}
               </div>
