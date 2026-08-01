@@ -1,49 +1,44 @@
 # mcpgram-mcp-server
 
-Official MCP bridge for MCPGRAM:
+Official MCP server for MCPGRAM — **stdio + Streamable HTTP + built-in OAuth 2.1** for Claude.ai, Cursor, and other MCP clients.
 
-- **stdio** + **Streamable HTTP** (`/mcp`)
-- **Auth0** authorization server for Claude.ai
-- **Per-user workspaces** — each Auth0 login maps to that user’s MCPGRAM workspace API key (no shared global key)
+## Features
 
-## Auth flow (Claude)
+- **MCPGRAM as Authorization Server** — DCR, PKCE, authorize, token, revoke
+- **Per-user workspaces** — consent selects a workspace; tokens bind to that workspace API key
+- No external Auth0 / WorkOS / Clerk dependency for MCP OAuth
+
+## Flow
 
 ```
-Claude → Auth0 login
-      → Bearer JWT on /mcp
-      → verify JWT (JWKS)
-      → email/sub → auth_identities → Supabase user
-      → active / default workspace
-      → oauth_workspace_keys (encrypted) or create api_keys row
-      → GET /api/v1/tools + POST /api/v1/execute as that workspace only
+Claude → discovery (PRM + AS metadata on this host)
+      → POST /register (DCR)
+      → GET /authorize (login + workspace + consent)
+      → POST /token (code + PKCE)
+      → POST /mcp (Bearer access token)
+      → workspace tools
 ```
 
-## Database (one-time)
+## Environment
 
-Run in Supabase SQL editor:
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `MCP_PUBLIC_URL` | yes | Public origin of this deployment |
+| `OAUTH_JWT_SECRET` | yes | HMAC for clients/codes/tokens (≥16 chars) |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Consent login + key issuance |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Browser consent session |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | Issue workspace API keys server-side |
+| `MCPGRAM_KEY_SECRET` | recommended | Encrypt stored workspace keys |
+| `MCPGRAM_BASE_URL` | yes | MCPGRAM API (`https://mcpgram.vercel.app`) |
 
-`supabase/migrations/20260801_auth0_identities.sql`
+## Claude connector URL
 
-Creates `auth_identities` + `oauth_workspace_keys`.
+```
+https://mcpgram-mcp-server.vercel.app/mcp
+```
 
-## Vercel env
-
-| Variable | Required |
-|----------|----------|
-| `MCP_PUBLIC_URL` | yes |
-| `AUTH0_DOMAIN` | yes |
-| `AUTH0_AUDIENCE` | yes (`…/mcp`) |
-| `NEXT_PUBLIC_SUPABASE_URL` | yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes |
-| `MCPGRAM_KEY_SECRET` | yes (encrypt per-user keys) |
-| `MCPGRAM_BASE_URL` | yes |
-
-**Do not set `MCPGRAM_OAUTH_API_KEY`** — removed. Each user gets their own workspace key.
-
-## Auth0 tips for email
-
-Access tokens may omit `email`. The server calls Auth0 `/userinfo` with the access token when needed. Ensure the API allows OIDC scopes and users grant `openid profile email`.
+Claude will discover OAuth on this same origin (`/register`, `/authorize`, `/token`).
 
 ## Isolation
 
-User A’s Auth0 session never loads User B’s workspace tools.
+Each user’s OAuth token only carries their selected workspace API key. User A never loads User B’s tools.
