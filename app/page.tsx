@@ -3,8 +3,8 @@ export default function Home() {
     <main style={{ fontFamily: "system-ui", padding: 24, maxWidth: 720 }}>
       <h1>mcpgram-mcp-server</h1>
       <p>
-        MCPGRAM remote MCP — Streamable HTTP. Claude.ai uses <strong>Auth0</strong> as the
-        authorization server; this host is the resource server.
+        MCPGRAM remote MCP — Streamable HTTP. This host is both the{" "}
+        <strong>OAuth 2.1 authorization server</strong> and the MCP resource server.
       </p>
       <ul>
         <li>
@@ -15,15 +15,22 @@ export default function Home() {
           <code>/.well-known/oauth-protected-resource</code>
         </li>
         <li>
-          AS metadata (proxied from Auth0 when configured):{" "}
+          Authorization server metadata:{" "}
           <code>/.well-known/oauth-authorization-server</code>
         </li>
         <li>
-          Health: <a href="/mcp?health=1">/mcp?health=1</a>
+          Dynamic client registration: <code>POST /register</code>
+        </li>
+        <li>
+          Authorize / consent: <code>/authorize</code>
+        </li>
+        <li>
+          Token: <code>POST /token</code>
         </li>
       </ul>
       <p>
-        Auth: Auth0 Bearer JWT <em>or</em> <code>Authorization: Bearer mcpg_live_…</code>
+        Auth: OAuth access token from MCPGRAM consent, or{" "}
+        <code>Authorization: Bearer mcpg_live_…</code>
       </p>
     </main>
   );

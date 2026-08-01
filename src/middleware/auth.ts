@@ -1,8 +1,6 @@
 import { McpgramApi } from "../api.js";
 import { configFromApiKey } from "../config.js";
 import { logger } from "../logger.js";
-import { isAuth0Configured, verifyAuth0AccessToken } from "../oauth/auth0.js";
-import { resolveApiKeyFromAuth0 } from "../oauth/resolve-user.js";
 import { verifyAccessToken } from "../oauth/tokens.js";
 
 export class AuthError extends Error {
@@ -33,8 +31,7 @@ export function extractBearerToken(
 /**
  * Resolve Bearer token to a MCPGRAM API key.
  * 1. Raw mcpg_* API keys (stdio / direct)
- * 2. Auth0 JWT → per-user workspace API key (never a global env key)
- * 3. Legacy homegrown OAuth tokens
+ * 2. MCPGRAM-issued OAuth access tokens (workspace-scoped after consent)
  */
 export async function resolveApiKeyFromBearer(token: string): Promise<string> {
   if (!token || token.length < 8) {
@@ -45,27 +42,13 @@ export async function resolveApiKeyFromBearer(token: string): Promise<string> {
     return validateApiKey(token);
   }
 
-  if (isAuth0Configured()) {
-    const claims = await verifyAuth0AccessToken(token);
-    if (claims) {
-      try {
-        const { apiKey, userId, workspaceId } = await resolveApiKeyFromAuth0(
-          claims,
-          token
-        );
-        logger.info("Auth0 JWT → workspace key", { userId, workspaceId });
-        return apiKey;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error("Auth0 workspace resolution failed", { message });
-        throw new AuthError(`Workspace resolution failed: ${message}`, 403);
-      }
-    }
-  }
-
   try {
     const claims = verifyAccessToken(token);
     if (claims?.api_key) {
+      logger.info("OAuth access token → workspace key", {
+        workspaceId: claims.workspace_id,
+        sub: claims.sub,
+      });
       return claims.api_key;
     }
   } catch {
@@ -93,7 +76,7 @@ export async function authenticateRequest(req: Request): Promise<string> {
   const token = extractBearerToken(req);
   if (!token) {
     throw new AuthError(
-      "Missing Authorization header. Complete OAuth (Auth0) or use Bearer <MCPGRAM_API_KEY>"
+      "Missing Authorization header. Complete OAuth or use Bearer <MCPGRAM_API_KEY>"
     );
   }
   return resolveApiKeyFromBearer(token);
