@@ -75,6 +75,7 @@ export async function POST(req: Request) {
         client_id,
         workspace_id: rec.workspace_id,
         api_key: rec.api_key,
+        workspaces: rec.workspaces,
         scope: rec.scope,
       });
       const refresh_token = issueRefreshToken({
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
         client_id,
         workspace_id: rec.workspace_id,
         api_key: rec.api_key,
+        workspaces: rec.workspaces,
         scope: rec.scope,
       });
 
@@ -106,6 +108,7 @@ export async function POST(req: Request) {
         client_id: claims.client_id,
         workspace_id: claims.workspace_id,
         api_key: claims.api_key,
+        workspaces: claims.workspaces,
         scope: claims.scope,
       });
       const refresh_token = issueRefreshToken({
@@ -113,6 +116,7 @@ export async function POST(req: Request) {
         client_id: claims.client_id,
         workspace_id: claims.workspace_id,
         api_key: claims.api_key,
+        workspaces: claims.workspaces,
         scope: claims.scope,
       });
 
