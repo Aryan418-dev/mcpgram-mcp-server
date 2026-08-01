@@ -1,10 +1,10 @@
-import { verifyPayload } from "../../../../src/oauth/crypto";
+import { verifyPayload } from "@/oauth/crypto";
 import {
   PROVIDERS,
   isProviderId,
   providerConfigured,
-} from "../../../../src/connectors/providers";
-import { upsertConnectorConnection } from "../../../../src/connectors/store";
+} from "@/connectors/providers";
+import { upsertConnectorConnection } from "@/connectors/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

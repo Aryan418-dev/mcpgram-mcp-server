@@ -1,10 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import { signPayload } from "../../../../src/oauth/crypto";
+import { signPayload } from "@/oauth/crypto";
 import {
   PROVIDERS,
   isProviderId,
   providerConfigured,
-} from "../../../../src/connectors/providers";
+} from "@/connectors/providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
