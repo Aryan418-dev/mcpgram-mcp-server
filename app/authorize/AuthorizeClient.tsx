@@ -36,7 +36,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
   const [password, setPassword] = useState("");
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -81,7 +81,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
       const json = (await res.json()) as { workspaces: Workspace[] };
       const list = json.workspaces ?? [];
       setWorkspaces(list);
-      setSelectedIds(new Set(list.map((w) => w.id)));
+      setSelectedIds(list.map((w) => w.id));
     })();
   }, [user]);
 
@@ -93,21 +93,19 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
     return () => window.clearTimeout(t);
   }, [success, redirectUrl]);
 
-  const allSelected = workspaces.length > 0 && selectedIds.size === workspaces.length;
-  const someSelected = selectedIds.size > 0 && !allSelected;
+  const allSelected = workspaces.length > 0 && selectedIds.length === workspaces.length;
+  const someSelected = selectedIds.length > 0 && !allSelected;
 
   function toggleAll() {
     if (success) return;
-    setSelectedIds(allSelected ? new Set() : new Set(workspaces.map((w) => w.id)));
+    setSelectedIds(allSelected ? [] : workspaces.map((w) => w.id));
   }
 
   function toggleOne(id: string) {
     if (success) return;
     setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      return [...prev, id];
     });
   }
 
@@ -137,7 +135,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
   }
 
   async function approve() {
-    if (selectedIds.size === 0) {
+    if (selectedIds.length === 0) {
       setError("Select at least one workspace");
       return;
     }
@@ -149,7 +147,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
       setBusy(false);
       return;
     }
-    const workspace_ids = workspaces.filter((w) => selectedIds.has(w.id)).map((w) => w.id);
+    const workspace_ids = workspaces.filter((w) => selectedIds.includes(w.id)).map((w) => w.id);
     const res = await fetch("/api/oauth/approve", {
       method: "POST",
       headers: {
@@ -316,7 +314,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
             Signed in as <span style={{ color: "#FFFFFF" }}>{user.email ?? user.id}</span>
           </p>
 
-          <div style={{ ...styles.card, opacity: success ? 0.55 : 1, pointerEvents: success ? "none" : "auto" }}>
+          <div style={{ ...styles.card, opacity: success ? 0.55 : 1 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={styles.cardTitle}>Choose Workspace</span>
               <button
@@ -335,37 +333,39 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
             ) : (
               <div style={styles.checkboxList} role="group" aria-label="Workspaces">
                 {workspaces.map((w) => {
-                  const checked = selectedIds.has(w.id);
+                  const checked = selectedIds.includes(w.id);
+                  const inputId = `ws-${w.id}`;
                   return (
-                    <button
+                    <label
                       key={w.id}
-                      type="button"
-                      onClick={() => toggleOne(w.id)}
+                      htmlFor={inputId}
                       style={{
                         ...styles.wsRow,
                         borderColor: checked ? "#FFFFFF" : "#2A2A2A",
                         background: checked ? "#1a1a1a" : "transparent",
+                        cursor: success ? "default" : "pointer",
                       }}
-                      aria-pressed={checked}
                     >
-                      <span
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        checked={checked}
+                        disabled={success}
+                        onChange={() => toggleOne(w.id)}
                         style={{
-                          ...styles.box,
-                          background: checked ? "#FFFFFF" : "#000000",
-                          borderColor: checked ? "#FFFFFF" : "#2A2A2A",
+                          width: 18,
+                          height: 18,
+                          marginTop: 2,
+                          flexShrink: 0,
+                          accentColor: "#FFFFFF",
+                          cursor: success ? "default" : "pointer",
                         }}
-                      >
-                        {checked ? (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2.5 6.5L5 9L9.5 3.5" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        ) : null}
-                      </span>
-                      <span style={{ textAlign: "left" }}>
+                      />
+                      <span style={{ textAlign: "left", flex: 1 }}>
                         <span style={{ color: "#FFFFFF", fontWeight: 500, display: "block" }}>{w.name}</span>
                         <span style={{ display: "block", fontSize: 11, color: "#6b6b6b", marginTop: 2 }}>{w.id}</span>
                       </span>
-                    </button>
+                    </label>
                   );
                 })}
               </div>
@@ -395,17 +395,17 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Pr
                   type="button"
                   style={{
                     ...styles.btnPrimary,
-                    opacity: busy || selectedIds.size === 0 ? 0.5 : 1,
-                    cursor: busy || selectedIds.size === 0 ? "not-allowed" : "pointer",
+                    opacity: busy || selectedIds.length === 0 ? 0.5 : 1,
+                    cursor: busy || selectedIds.length === 0 ? "not-allowed" : "pointer",
                   }}
-                  disabled={busy || selectedIds.size === 0}
+                  disabled={busy || selectedIds.length === 0}
                   onClick={approve}
                 >
                   {busy
                     ? "Authorizing…"
-                    : selectedIds.size <= 1
+                    : selectedIds.length <= 1
                       ? "Authorize"
-                      : `Authorize ${selectedIds.size} workspaces`}
+                      : `Authorize ${selectedIds.length} workspaces`}
                 </button>
                 <button type="button" style={styles.btnSecondary} onClick={() => sb().auth.signOut()} disabled={busy}>
                   Cancel
