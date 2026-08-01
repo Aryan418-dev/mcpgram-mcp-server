@@ -4,10 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-type Props = { supabaseUrl: string; supabaseAnonKey: string };
+type Props = {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  clientName: string;
+};
+
 type Workspace = { id: string; name: string };
 
-export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
+const MCPGRAM_LOGO = "/logo-on-dark.png";
+
+export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName }: Props) {
   const sp = useSearchParams();
   const params = useMemo(
     () => ({
@@ -23,6 +30,8 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
     [sp]
   );
 
+  const appName = (clientName && clientName.trim()) || "Application";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
@@ -32,6 +41,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
   const [busy, setBusy] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
 
   function sb(): SupabaseClient {
     return createClient(supabaseUrl, supabaseAnonKey);
@@ -75,14 +85,24 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
     })();
   }, [user]);
 
+  useEffect(() => {
+    if (!success || !redirectUrl) return;
+    const t = window.setTimeout(() => {
+      window.location.href = redirectUrl;
+    }, 1600);
+    return () => window.clearTimeout(t);
+  }, [success, redirectUrl]);
+
   const allSelected = workspaces.length > 0 && selectedIds.size === workspaces.length;
   const someSelected = selectedIds.size > 0 && !allSelected;
 
   function toggleAll() {
+    if (success) return;
     setSelectedIds(allSelected ? new Set() : new Set(workspaces.map((w) => w.id)));
   }
 
   function toggleOne(id: string) {
+    if (success) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -144,11 +164,9 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
       setBusy(false);
       return;
     }
+    setRedirectUrl(json.redirect);
     setSuccess(true);
     setBusy(false);
-    window.setTimeout(() => {
-      window.location.href = json.redirect!;
-    }, 1400);
   }
 
   if (!sessionReady) {
@@ -168,83 +186,90 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
     );
   }
 
-  if (success) {
-    return (
-      <main style={styles.page}>
-        <HeaderBar animate={false} success />
-        <h1 style={styles.title}>Successfully Connected</h1>
-        <p style={styles.subtitle}>Your application can now securely access your MCPGRAM workspace.</p>
-        <button type="button" style={styles.btnPrimary} disabled>
-          Continue
-        </button>
-      </main>
-    );
-  }
-
   return (
     <main style={styles.page}>
       <style>{`
         @keyframes tileFlow {
-          0% { opacity: 0.15; transform: scale(0.85); }
-          40% { opacity: 1; transform: scale(1); }
-          100% { opacity: 0.15; transform: scale(0.85); }
+          0% { opacity: 0.2; transform: translateY(0); }
+          50% { opacity: 1; transform: translateY(-2px); }
+          100% { opacity: 0.2; transform: translateY(0); }
         }
-        .mcp-tile { animation: tileFlow 2.4s ease-in-out infinite; }
+        @keyframes successPop {
+          0% { transform: scale(0.4); opacity: 0; }
+          60% { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes successGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35); }
+          50% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+        }
+        .mcp-tile { animation: tileFlow 2.2s ease-in-out infinite; }
         .mcp-tile:nth-child(1) { animation-delay: 0s; }
-        .mcp-tile:nth-child(2) { animation-delay: 0.15s; }
-        .mcp-tile:nth-child(3) { animation-delay: 0.3s; }
-        .mcp-tile:nth-child(4) { animation-delay: 0.45s; }
-        .mcp-tile:nth-child(5) { animation-delay: 0.6s; }
-        .mcp-tile:nth-child(6) { animation-delay: 0.75s; }
-        .mcp-tile:nth-child(7) { animation-delay: 0.9s; }
-        .mcp-tile:nth-child(8) { animation-delay: 1.05s; }
-        input[type="checkbox"] {
-          appearance: none;
-          -webkit-appearance: none;
-          width: 18px;
-          height: 18px;
-          border: 1.5px solid #2A2A2A;
-          border-radius: 5px;
-          background: #000;
-          cursor: pointer;
-          flex-shrink: 0;
-          margin-top: 1px;
-          position: relative;
-        }
-        input[type="checkbox"]:checked {
-          background: #fff;
-          border-color: #fff;
-        }
-        input[type="checkbox"]:checked::after {
-          content: "";
-          position: absolute;
-          left: 5px;
-          top: 1px;
-          width: 5px;
-          height: 10px;
-          border: solid #000;
-          border-width: 0 2px 2px 0;
-          transform: rotate(45deg);
-        }
-        input[type="checkbox"]:indeterminate {
-          background: #fff;
-          border-color: #fff;
-        }
-        input[type="checkbox"]:indeterminate::after {
-          content: "";
-          position: absolute;
-          left: 3px;
-          top: 7px;
-          width: 10px;
-          height: 2px;
-          background: #000;
+        .mcp-tile:nth-child(2) { animation-delay: 0.12s; }
+        .mcp-tile:nth-child(3) { animation-delay: 0.24s; }
+        .mcp-tile:nth-child(4) { animation-delay: 0.36s; }
+        .mcp-tile:nth-child(5) { animation-delay: 0.48s; }
+        .mcp-tile:nth-child(6) { animation-delay: 0.6s; }
+        .mcp-tile:nth-child(7) { animation-delay: 0.72s; }
+        .mcp-tile:nth-child(8) { animation-delay: 0.84s; }
+        .success-check {
+          animation: successPop 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+                     successGlow 1.2s ease-out 0.2s 2;
         }
       `}</style>
 
-      <HeaderBar animate={!busy} success={false} />
+      {/* Header: client app ↔ MCPGRAM */}
+      <div style={styles.header}>
+        <div style={styles.logoBox} title={appName}>
+          <div style={styles.clientInitial}>{appName.slice(0, 1).toUpperCase()}</div>
+        </div>
 
-      <h1 style={styles.title}>Connect to MCPGRAM</h1>
-      <p style={styles.subtitle}>Choose which workspaces this application can access.</p>
+        <div style={styles.connector} aria-hidden>
+          {success ? (
+            <div className="success-check" style={styles.successRing}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M5 13l4 4L19 7"
+                  stroke="#22C55E"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          ) : (
+            <div style={styles.tileRow}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={!busy ? "mcp-tile" : undefined}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    background: "#FFFFFF",
+                    borderRadius: 1.5,
+                    display: "inline-block",
+                    opacity: busy ? 0.35 : undefined,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={styles.logoBox} title="MCPGRAM">
+          <img src={MCPGRAM_LOGO} alt="MCPGRAM" width={32} height={32} style={{ display: "block", objectFit: "contain" }} />
+        </div>
+      </div>
+
+      <h1 style={styles.title}>
+        {success ? "Successfully Connected" : `Connect ${appName} to MCPGRAM`}
+      </h1>
+      <p style={styles.subtitle}>
+        {success
+          ? `${appName} can now securely access your MCPGRAM workspace.`
+          : `Choose which workspaces ${appName} can access.`}
+      </p>
 
       {!user ? (
         <div style={styles.card}>
@@ -287,51 +312,72 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
         </div>
       ) : (
         <>
-          <p style={{ ...styles.mute, marginBottom: 16, fontSize: 13 }}>
+          <p style={{ ...styles.mute, marginBottom: 16, fontSize: 13, textAlign: "center" }}>
             Signed in as <span style={{ color: "#FFFFFF" }}>{user.email ?? user.id}</span>
           </p>
 
-          <div style={styles.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ ...styles.card, opacity: success ? 0.55 : 1, pointerEvents: success ? "none" : "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={styles.cardTitle}>Choose Workspace</span>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#BDBDBD" }}>
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected;
-                  }}
-                  onChange={toggleAll}
-                />
-                Select All
-              </label>
+              <button
+                type="button"
+                onClick={toggleAll}
+                style={styles.selectAllBtn}
+                disabled={workspaces.length === 0 || success}
+              >
+                {allSelected ? "Deselect all" : "Select all"}
+                {someSelected ? " ·" : ""}
+              </button>
             </div>
 
             {workspaces.length === 0 ? (
               <p style={styles.mute}>No workspaces found.</p>
             ) : (
-              <div style={styles.checkboxList}>
-                {workspaces.map((w) => (
-                  <label key={w.id} style={styles.checkboxRow}>
-                    <input type="checkbox" checked={selectedIds.has(w.id)} onChange={() => toggleOne(w.id)} />
-                    <span>
-                      <span style={{ color: "#FFFFFF", fontWeight: 500 }}>{w.name}</span>
-                      <span style={{ display: "block", fontSize: 11, color: "#6b6b6b", marginTop: 2 }}>{w.id}</span>
-                    </span>
-                  </label>
-                ))}
+              <div style={styles.checkboxList} role="group" aria-label="Workspaces">
+                {workspaces.map((w) => {
+                  const checked = selectedIds.has(w.id);
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => toggleOne(w.id)}
+                      style={{
+                        ...styles.wsRow,
+                        borderColor: checked ? "#FFFFFF" : "#2A2A2A",
+                        background: checked ? "#1a1a1a" : "transparent",
+                      }}
+                      aria-pressed={checked}
+                    >
+                      <span
+                        style={{
+                          ...styles.box,
+                          background: checked ? "#FFFFFF" : "#000000",
+                          borderColor: checked ? "#FFFFFF" : "#2A2A2A",
+                        }}
+                      >
+                        {checked ? (
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2.5 6.5L5 9L9.5 3.5" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span style={{ textAlign: "left" }}>
+                        <span style={{ color: "#FFFFFF", fontWeight: 500, display: "block" }}>{w.name}</span>
+                        <span style={{ display: "block", fontSize: 11, color: "#6b6b6b", marginTop: 2 }}>{w.id}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div style={{ ...styles.card, marginTop: 12 }}>
+          <div style={{ ...styles.card, marginTop: 12, opacity: success ? 0.55 : 1 }}>
             <div style={{ ...styles.cardTitle, marginBottom: 12 }}>Permissions</div>
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {PERMISSIONS.map((p) => (
                 <li key={p} style={styles.permRow}>
-                  <span style={styles.checkIcon} aria-hidden>
-                    ✓
-                  </span>
+                  <span style={styles.checkIcon} aria-hidden>✓</span>
                   <span>{p}</span>
                 </li>
               ))}
@@ -339,21 +385,33 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey }: Props) {
           </div>
 
           <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            <button
-              type="button"
-              style={styles.btnPrimary}
-              disabled={busy || selectedIds.size === 0}
-              onClick={approve}
-            >
-              {busy
-                ? "Authorizing…"
-                : selectedIds.size <= 1
-                  ? "Authorize"
-                  : `Authorize ${selectedIds.size} workspaces`}
-            </button>
-            <button type="button" style={styles.btnSecondary} onClick={() => sb().auth.signOut()} disabled={busy}>
-              Cancel
-            </button>
+            {success ? (
+              <button type="button" style={styles.btnPrimary} disabled>
+                Connected
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.btnPrimary,
+                    opacity: busy || selectedIds.size === 0 ? 0.5 : 1,
+                    cursor: busy || selectedIds.size === 0 ? "not-allowed" : "pointer",
+                  }}
+                  disabled={busy || selectedIds.size === 0}
+                  onClick={approve}
+                >
+                  {busy
+                    ? "Authorizing…"
+                    : selectedIds.size <= 1
+                      ? "Authorize"
+                      : `Authorize ${selectedIds.size} workspaces`}
+                </button>
+                <button type="button" style={styles.btnSecondary} onClick={() => sb().auth.signOut()} disabled={busy}>
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -374,78 +432,9 @@ const PERMISSIONS = [
   "Sync data securely",
 ];
 
-function HeaderBar({ animate, success }: { animate: boolean; success: boolean }) {
-  return (
-    <div style={styles.header}>
-      <div style={styles.logoBox} aria-label="Client">
-        <ClientMark />
-      </div>
-
-      <div style={styles.connector}>
-        {success ? (
-          <div style={styles.successRing} aria-label="Connected">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M5 13l4 4L19 7"
-                stroke="#22C55E"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-        ) : (
-          <div style={styles.tileRow} aria-hidden>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span
-                key={i}
-                className={animate ? "mcp-tile" : undefined}
-                style={{
-                  width: 6,
-                  height: 6,
-                  background: "#FFFFFF",
-                  borderRadius: 1.5,
-                  display: "inline-block",
-                  opacity: animate ? undefined : 0.35,
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.logoBox} aria-label="MCPGRAM">
-        <McpgramMark />
-      </div>
-    </div>
-  );
-}
-
-function ClientMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
-      <rect x="3" y="3" width="22" height="22" rx="6" stroke="#FFFFFF" strokeWidth="1.5" />
-      <circle cx="14" cy="14" r="5" stroke="#FFFFFF" strokeWidth="1.5" />
-      <circle cx="14" cy="14" r="1.5" fill="#FFFFFF" />
-    </svg>
-  );
-}
-
-function McpgramMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
-      <rect x="4" y="4" width="8" height="8" rx="1.5" fill="#FFFFFF" />
-      <rect x="16" y="4" width="8" height="8" rx="1.5" fill="#FFFFFF" opacity="0.85" />
-      <rect x="4" y="16" width="8" height="8" rx="1.5" fill="#FFFFFF" opacity="0.85" />
-      <rect x="16" y="16" width="8" height="8" rx="1.5" fill="#FFFFFF" opacity="0.55" />
-    </svg>
-  );
-}
-
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    fontFamily:
-      "Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    fontFamily: 'Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     maxWidth: 420,
     margin: "0 auto",
     padding: "48px 20px 40px",
@@ -462,20 +451,34 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 28,
   },
   logoBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     background: "#111111",
     border: "1px solid #2A2A2A",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
-  connector: {
-    width: 88,
+  clientInitial: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    background: "#FFFFFF",
+    color: "#000000",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    fontWeight: 700,
+    fontSize: 18,
+  },
+  connector: {
+    width: 96,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
   },
   tileRow: {
     display: "flex",
@@ -490,11 +493,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(34, 197, 94, 0.08)",
+    background: "rgba(34, 197, 94, 0.1)",
   },
   title: {
     margin: "0 0 8px",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 700,
     letterSpacing: "-0.02em",
     textAlign: "center",
@@ -524,6 +527,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: "#FFFFFF",
   },
+  selectAllBtn: {
+    background: "transparent",
+    border: "none",
+    color: "#BDBDBD",
+    fontSize: 13,
+    cursor: "pointer",
+    padding: 0,
+    fontFamily: "inherit",
+  },
   label: {
     display: "block",
     marginBottom: 14,
@@ -544,17 +556,36 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
   },
   checkboxList: {
-    maxHeight: 240,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginTop: 8,
+    maxHeight: 260,
     overflowY: "auto",
   },
-  checkboxRow: {
+  wsRow: {
     display: "flex",
     alignItems: "flex-start",
     gap: 12,
-    padding: "12px 4px",
+    padding: "12px 12px",
     fontSize: 14,
     cursor: "pointer",
-    borderTop: "1px solid #1a1a1a",
+    borderRadius: 14,
+    border: "1px solid #2A2A2A",
+    width: "100%",
+    fontFamily: "inherit",
+    color: "inherit",
+  },
+  box: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    border: "1.5px solid #2A2A2A",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
   },
   permRow: {
     display: "flex",
@@ -581,6 +612,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     fontSize: 15,
     cursor: "pointer",
+    fontFamily: "inherit",
   },
   btnSecondary: {
     flex: 1,
@@ -593,6 +625,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     fontSize: 14,
     cursor: "pointer",
+    fontFamily: "inherit",
   },
   error: {
     color: "#f87171",
