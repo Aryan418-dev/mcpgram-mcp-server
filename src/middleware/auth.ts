@@ -1,5 +1,5 @@
 import { McpgramApi } from "../api.js";
-import { configFromApiKey } from "../config.js";
+import { configFromApiKey, type AuthSession } from "../config.js";
 import { logger } from "../logger.js";
 import { verifyAccessToken } from "../oauth/tokens.js";
 
@@ -29,33 +29,67 @@ export function extractBearerToken(
 }
 
 /**
- * Resolve Bearer token to a MCPGRAM API key.
+ * Resolve Bearer token to an AuthSession (one or more workspace API keys).
  * 1. Raw mcpg_* API keys (stdio / direct)
- * 2. MCPGRAM-issued OAuth access tokens (workspace-scoped after consent)
+ * 2. MCPGRAM-issued OAuth access tokens (multi-workspace after consent)
  */
-export async function resolveApiKeyFromBearer(token: string): Promise<string> {
+export async function resolveSessionFromBearer(token: string): Promise<AuthSession> {
   if (!token || token.length < 8) {
     throw new AuthError("Missing or malformed Authorization Bearer token");
   }
 
   if (token.startsWith("mcpg_")) {
-    return validateApiKey(token);
+    const key = await validateApiKey(token);
+    return {
+      apiKey: key,
+      apiKeys: [key],
+      workspaceIds: [],
+      workspaceNames: {},
+    };
   }
 
   try {
     const claims = verifyAccessToken(token);
     if (claims?.api_key) {
-      logger.info("OAuth access token → workspace key", {
-        workspaceId: claims.workspace_id,
+      const workspaces = claims.workspaces?.length
+        ? claims.workspaces
+        : [{ id: claims.workspace_id, api_key: claims.api_key }];
+      const apiKeys = workspaces.map((w) => w.api_key).filter(Boolean);
+      const workspaceIds = workspaces.map((w) => w.id);
+      const workspaceNames: Record<string, string> = {};
+      for (const w of workspaces) {
+        if (w.name) workspaceNames[w.id] = w.name;
+      }
+      logger.info("OAuth access token -> workspace key(s)", {
+        workspaceIds,
+        count: apiKeys.length,
         sub: claims.sub,
       });
-      return claims.api_key;
+      return {
+        apiKey: claims.api_key,
+        apiKeys: apiKeys.length ? apiKeys : [claims.api_key],
+        workspaceIds,
+        workspaceNames,
+        userId: claims.sub,
+      };
     }
   } catch {
     // fall through
   }
 
-  return validateApiKey(token);
+  const key = await validateApiKey(token);
+  return {
+    apiKey: key,
+    apiKeys: [key],
+    workspaceIds: [],
+    workspaceNames: {},
+  };
+}
+
+/** @deprecated Prefer resolveSessionFromBearer */
+export async function resolveApiKeyFromBearer(token: string): Promise<string> {
+  const session = await resolveSessionFromBearer(token);
+  return session.apiKey;
 }
 
 export async function validateApiKey(apiKey: string): Promise<string> {
@@ -72,12 +106,12 @@ export async function validateApiKey(apiKey: string): Promise<string> {
   return apiKey;
 }
 
-export async function authenticateRequest(req: Request): Promise<string> {
+export async function authenticateRequest(req: Request): Promise<AuthSession> {
   const token = extractBearerToken(req);
   if (!token) {
     throw new AuthError(
       "Missing Authorization header. Complete OAuth or use Bearer <MCPGRAM_API_KEY>"
     );
   }
-  return resolveApiKeyFromBearer(token);
+  return resolveSessionFromBearer(token);
 }
