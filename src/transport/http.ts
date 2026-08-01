@@ -3,7 +3,7 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "../server.js";
-import { configFromApiKey } from "../config.js";
+import { configFromSession } from "../config.js";
 import {
   authenticateRequest,
   AuthError,
@@ -21,7 +21,6 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
 };
 
-/** RFC 9728 §5.1 — path-aware PRM for resource …/mcp */
 function wwwAuthenticate(req: Request): string {
   const meta = `${publicBaseUrl(req)}/.well-known/oauth-protected-resource/mcp`;
   return `Bearer realm="mcpgram", resource_metadata="${meta}"`;
@@ -66,9 +65,12 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
       JSON.stringify({
         ok: true,
         service: "mcpgram-mcp",
+        version: "1.5.0",
         resource: resourceUrl(req),
         oauth: true,
         authorization_server: "mcpgram",
+        platform_tools: true,
+        multi_workspace: true,
       }),
       {
         status: 200,
@@ -77,7 +79,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
     );
   }
 
-  let apiKey: string;
+  let session;
   try {
     const token = extractBearerToken(req);
     if (!token) {
@@ -109,7 +111,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
       );
     }
 
-    apiKey = await authenticateRequest(req);
+    session = await authenticateRequest(req);
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.status, err.message, -32001, {
@@ -122,7 +124,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
   }
 
   try {
-    const config = configFromApiKey(apiKey);
+    const config = configFromSession(session);
     const server = createMcpServer(config);
 
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -142,6 +144,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
       method,
       status: response.status,
       ms: Date.now() - started,
+      workspaces: session.workspaceIds.length || 1,
     });
 
     return new Response(response.body, {
