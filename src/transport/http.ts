@@ -11,7 +11,6 @@ import {
 } from "../middleware/auth.js";
 import { globalRateLimiter } from "../middleware/rate-limit.js";
 import { logger } from "../logger.js";
-import { isAuth0Configured } from "../oauth/auth0.js";
 import { publicBaseUrl, resourceUrl } from "../oauth/config.js";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -69,7 +68,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
         service: "mcpgram-mcp",
         resource: resourceUrl(req),
         oauth: true,
-        auth0: isAuth0Configured(),
+        authorization_server: "mcpgram",
       }),
       {
         status: 200,
