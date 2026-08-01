@@ -9,15 +9,14 @@ import { ToolRegistry } from "./tools.js";
 import { executeToolCall } from "./execute.js";
 import { logger } from "./logger.js";
 
-/** Shared MCP Server factory used by stdio and HTTP transports. */
 export function createMcpServer(config: Config): Server {
   const api = new McpgramApi(config);
-  const registry = new ToolRegistry(api);
+  const registry = new ToolRegistry(api, config);
 
   const server = new Server(
     {
       name: "mcpgram",
-      version: "1.2.0",
+      version: "1.5.0",
     },
     {
       capabilities: {
@@ -37,7 +36,7 @@ export function createMcpServer(config: Config): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     logger.debug("tools/call", { name });
-    return executeToolCall(registry, api, name, args ?? {});
+    return executeToolCall(registry, api, config, name, args ?? {});
   });
 
   return server;
