@@ -1,22 +1,33 @@
+import type { Config } from "./config.js";
+import { allApiKeys, configFromApiKey } from "./config.js";
 import type { McpgramApi } from "./api.js";
+import { McpgramApi as ApiCtor } from "./api.js";
 import { logger } from "./logger.js";
 import type { ResolvedTool } from "./types.js";
+import { PLATFORM_TOOLS } from "./platform-tools.js";
 
-/** Sanitize a string into a valid MCP tool name fragment. */
 export function sanitizeName(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64) || "tool";
+  return (
+    raw
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 64) || "tool"
+  );
 }
 
 function uniqueName(
   serverName: string,
   toolName: string,
-  used: Set<string>
+  used: Set<string>,
+  workspaceHint?: string
 ): string {
-  const base = `${sanitizeName(serverName)}__${sanitizeName(toolName)}`;
+  const baseParts = [
+    workspaceHint ? sanitizeName(workspaceHint) : null,
+    sanitizeName(serverName),
+    sanitizeName(toolName),
+  ].filter(Boolean) as string[];
+  const base = baseParts.join("__");
   let candidate = base.slice(0, 120);
   let i = 2;
   while (used.has(candidate)) {
@@ -38,60 +49,83 @@ function normalizeInputSchema(
   return schema;
 }
 
-/**
- * Fetch tools from MCPGRAM and map them to MCP Tool descriptors.
- * Maintains a name → tool_id registry for tools/call.
- */
 export class ToolRegistry {
   private byName = new Map<string, ResolvedTool>();
 
-  constructor(private readonly api: McpgramApi) {}
+  constructor(
+    private readonly api: McpgramApi,
+    private readonly config: Config
+  ) {}
 
   get(mcpName: string): ResolvedTool | undefined {
     return this.byName.get(mcpName);
   }
 
   async refresh(): Promise<ResolvedTool[]> {
-    const data = await this.api.listTools();
     const used = new Set<string>();
     const next = new Map<string, ResolvedTool>();
+    const keys = allApiKeys(this.config);
+    const multi = keys.length > 1;
 
-    for (const server of data.servers ?? []) {
-      for (const tool of server.tools ?? []) {
-        const mcpName = uniqueName(server.name, tool.name, used);
-        const resolved: ResolvedTool = {
-          mcpName,
-          toolId: tool.tool_id,
-          originalName: tool.name,
-          serverName: server.name,
-          description:
-            tool.description?.trim() ||
-            `${tool.name} via ${server.name}`,
-          inputSchema: normalizeInputSchema(tool.input_schema),
-        };
-        next.set(mcpName, resolved);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const wsId = this.config.workspaceIds[i];
+      const wsName =
+        (wsId && this.config.workspaceNames[wsId]) ||
+        (multi ? `ws${i + 1}` : undefined);
+      const api =
+        key === this.config.apiKey ? this.api : new ApiCtor(configFromApiKey(key));
+
+      try {
+        const data = await api.listTools();
+        for (const server of data.servers ?? []) {
+          for (const tool of server.tools ?? []) {
+            const mcpName = uniqueName(
+              server.name,
+              tool.name,
+              used,
+              multi ? wsName : undefined
+            );
+            next.set(mcpName, {
+              mcpName,
+              toolId: tool.tool_id,
+              originalName: tool.name,
+              serverName: server.name,
+              description:
+                tool.description?.trim() || `${tool.name} via ${server.name}`,
+              inputSchema: normalizeInputSchema(tool.input_schema),
+              apiKey: key,
+              workspaceId: wsId,
+            });
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`Failed to list tools for workspace index ${i}`, { message });
       }
     }
 
     this.byName = next;
-    logger.info(`Discovered ${next.size} tools from MCPGRAM`, {
-      servers: (data.servers ?? []).map((s) => s.name),
+    logger.info(`Discovered ${next.size} connector tools from MCPGRAM`, {
+      workspaces: keys.length,
     });
     return [...next.values()];
   }
 
   async listForMcp(): Promise<
-    Array<{
-      name: string;
-      description: string;
-      inputSchema: Record<string, unknown>;
-    }>
+    Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
   > {
-    const tools = await this.refresh();
-    return tools.map((t) => ({
+    const connectorTools = await this.refresh();
+    const platform = PLATFORM_TOOLS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
+    const connectors = connectorTools.map((t) => ({
       name: t.mcpName,
       description: t.description,
       inputSchema: t.inputSchema,
     }));
+    return [...platform, ...connectors];
   }
 }
