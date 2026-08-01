@@ -15,7 +15,7 @@ type Props = {
 
 type Workspace = { id: string; name: string };
 
-const MCPGRAM_LOGO = "/logo-on-dark.png";
+const MCPGRAM_LOGO = "/White-logo.png";
 
 export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clientLogoUrl }: Props) {
   const sp = useSearchParams();
