@@ -38,6 +38,9 @@ export interface ResolvedTool {
   serverName: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** API key that owns this tool (multi-workspace). */
+  apiKey?: string;
+  workspaceId?: string;
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
