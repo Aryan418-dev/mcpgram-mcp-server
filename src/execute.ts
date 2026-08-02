@@ -6,6 +6,8 @@ import { ApiError, McpgramApi as ApiCtor } from "./api.js";
 import type { ToolRegistry } from "./tools.js";
 import { logger } from "./logger.js";
 import { executePlatformTool, isPlatformTool } from "./platform-tools.js";
+import { isUniversalTool } from "./universal/defs.js";
+import { executeUniversalTool } from "./universal/handler.js";
 
 const CallArgsSchema = z.record(z.unknown()).default({});
 
@@ -21,13 +23,15 @@ export async function executeToolCall(
   name: string,
   args: unknown
 ): Promise<McpToolResult> {
+  const parsed = CallArgsSchema.safeParse(args ?? {});
+  const callArgs = (parsed.success ? parsed.data : {}) as Record<string, unknown>;
+
+  if (isUniversalTool(name)) {
+    return executeUniversalTool(registry, api, config, name, callArgs);
+  }
+
   if (isPlatformTool(name)) {
-    const parsed = CallArgsSchema.safeParse(args ?? {});
-    return executePlatformTool(
-      config,
-      name,
-      (parsed.success ? parsed.data : {}) as Record<string, unknown>
-    );
+    return executePlatformTool(config, name, callArgs);
   }
 
   let tool = registry.get(name);
@@ -41,14 +45,13 @@ export async function executeToolCall(
       content: [
         {
           type: "text",
-          text: `Unknown tool: ${name}. Try mcpgram_list_workspace_tools or mcpgram_how_to_add_tools.`,
+          text: `Unknown tool: ${name}. Use search_tools to find tools, then execute_tool with the returned id.`,
         },
       ],
       isError: true,
     };
   }
 
-  const parsed = CallArgsSchema.safeParse(args ?? {});
   if (!parsed.success) {
     return {
       content: [{ type: "text", text: `Invalid arguments: ${parsed.error.message}` }],
@@ -56,7 +59,7 @@ export async function executeToolCall(
     };
   }
 
-  logger.info(`Executing tool`, {
+  logger.info(`Executing connector tool (legacy direct)`, {
     mcpName: name,
     toolId: tool.toolId,
     server: tool.serverName,
@@ -71,7 +74,7 @@ export async function executeToolCall(
   try {
     const result = await execApi.execute({
       tool_id: tool.toolId,
-      input: parsed.data,
+      input: callArgs,
     });
 
     if (result.status === "error" || result.error) {
