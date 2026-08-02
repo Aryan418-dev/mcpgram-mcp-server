@@ -60,9 +60,7 @@ export class McpgramApi {
           if (isRetryable(res.status) && attempt < this.config.maxRetries) {
             const retryAfter = Number(res.headers.get("retry-after") ?? "0");
             const backoff =
-              retryAfter > 0
-                ? retryAfter * 1000
-                : Math.min(1000 * 2 ** attempt, 8000);
+              retryAfter > 0 ? retryAfter * 1000 : Math.min(1000 * 2 ** attempt, 8000);
             logger.warn(`Retryable HTTP ${res.status}, backing off ${backoff}ms`, {
               path,
               attempt,
@@ -71,8 +69,7 @@ export class McpgramApi {
             continue;
           }
           const msg =
-            (json as { error?: string } | null)?.error ??
-            `HTTP ${res.status} from MCPGRAM`;
+            (json as { error?: string } | null)?.error ?? `HTTP ${res.status} from MCPGRAM`;
           throw new ApiError(msg, res.status, json);
         }
 
@@ -98,9 +95,7 @@ export class McpgramApi {
   }
 
   listTools(serverFilter?: string): Promise<ToolsListResponse> {
-    const qs = serverFilter
-      ? `?server=${encodeURIComponent(serverFilter)}`
-      : "";
+    const qs = serverFilter ? `?server=${encodeURIComponent(serverFilter)}` : "";
     return this.request<ToolsListResponse>("GET", `/api/v1/tools${qs}`);
   }
 
@@ -108,7 +103,36 @@ export class McpgramApi {
     return this.request<ExecuteResponse>("POST", "/api/v1/execute", req);
   }
 
-  /** Auth probe — returns false only on HTTP 401. */
+  listMcpServers(): Promise<{
+    workspace_id: string;
+    servers: Array<{
+      server_id: string;
+      name: string;
+      url: string;
+      status: string;
+      tool_count: number;
+      provider_type: string;
+    }>;
+  }> {
+    return this.request("GET", "/api/v1/mcp-servers");
+  }
+
+  connectMcpServer(body: {
+    url: string;
+    name?: string;
+    authentication?: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/api/v1/mcp-servers", body);
+  }
+
+  disconnectMcpServer(serverId: string): Promise<Record<string, unknown>> {
+    return this.request("DELETE", `/api/v1/mcp-servers/${encodeURIComponent(serverId)}`);
+  }
+
+  refreshMcpServer(serverId: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/api/v1/mcp-servers/${encodeURIComponent(serverId)}`);
+  }
+
   async validateKey(): Promise<boolean> {
     try {
       await this.listTools();
