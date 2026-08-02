@@ -4,7 +4,6 @@ import type { McpgramApi } from "./api.js";
 import { McpgramApi as ApiCtor } from "./api.js";
 import { logger } from "./logger.js";
 import type { ResolvedTool } from "./types.js";
-import { PLATFORM_TOOLS } from "./platform-tools.js";
 
 export function sanitizeName(raw: string): string {
   return (
@@ -41,10 +40,10 @@ function normalizeInputSchema(
   schema: Record<string, unknown> | null | undefined
 ): Record<string, unknown> {
   if (!schema || typeof schema !== "object") {
-    return { type: "object", properties: {} };
+    return { type: "object", properties: {}, additionalProperties: true };
   }
-  if (!("type" in schema)) {
-    return { type: "object", properties: {}, ...schema };
+  if (!schema.type) {
+    return { type: "object", properties: schema.properties ?? {}, additionalProperties: true, ...schema };
   }
   return schema;
 }
@@ -61,6 +60,11 @@ export class ToolRegistry {
     return this.byName.get(mcpName);
   }
 
+  /** All resolved connector tools (internal catalog). */
+  all(): ResolvedTool[] {
+    return [...this.byName.values()];
+  }
+
   async refresh(): Promise<ResolvedTool[]> {
     const used = new Set<string>();
     const next = new Map<string, ResolvedTool>();
@@ -71,10 +75,8 @@ export class ToolRegistry {
       const key = keys[i];
       const wsId = this.config.workspaceIds[i];
       const wsName =
-        (wsId && this.config.workspaceNames[wsId]) ||
-        (multi ? `ws${i + 1}` : undefined);
-      const api =
-        key === this.config.apiKey ? this.api : new ApiCtor(configFromApiKey(key));
+        (wsId && this.config.workspaceNames[wsId]) || (multi ? `ws${i + 1}` : undefined);
+      const api = key === this.config.apiKey ? this.api : new ApiCtor(configFromApiKey(key));
 
       try {
         const data = await api.listTools();
@@ -91,8 +93,7 @@ export class ToolRegistry {
               toolId: tool.tool_id,
               originalName: tool.name,
               serverName: server.name,
-              description:
-                tool.description?.trim() || `${tool.name} via ${server.name}`,
+              description: tool.description?.trim() || `${tool.name} via ${server.name}`,
               inputSchema: normalizeInputSchema(tool.input_schema),
               apiKey: key,
               workspaceId: wsId,
@@ -115,17 +116,14 @@ export class ToolRegistry {
   async listForMcp(): Promise<
     Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
   > {
-    const connectorTools = await this.refresh();
-    const platform = PLATFORM_TOOLS.map((t) => ({
+    // Universal Layer: AI agents only see ~15 meta-tools.
+    // Connector tools remain internal (search_tools / execute_tool).
+    const { UNIVERSAL_TOOLS } = await import("./universal/defs.js");
+    void this.refresh().catch(() => undefined);
+    return UNIVERSAL_TOOLS.map((t) => ({
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
     }));
-    const connectors = connectorTools.map((t) => ({
-      name: t.mcpName,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    }));
-    return [...platform, ...connectors];
   }
 }
