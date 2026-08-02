@@ -1,6 +1,6 @@
 {
   "name": "mcpgram-mcp-server",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "Official MCP server for MCPGRAM - stdio + Streamable HTTP + built-in OAuth 2.1 for Claude.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -38,9 +38,10 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.14.15",
+    "@types/node": "^20.14.10",
     "@types/react": "18.3.3",
-    "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "@types/react-dom": "18.3.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
   }
 }
