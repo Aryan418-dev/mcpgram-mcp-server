@@ -15,7 +15,7 @@ export function createMcpServer(config: Config): Server {
 
   const server = new Server(
     {
-      name: "mcpgram",
+      name: "MCPGRAM",
       version: "2.0.0",
     },
     {
