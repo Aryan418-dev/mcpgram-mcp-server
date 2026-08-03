@@ -456,15 +456,36 @@ export async function executeUniversalTool(
           const k = t.serverName.toLowerCase();
           byServer.set(k, (byServer.get(k) ?? 0) + 1);
         }
-        const servers = (data.servers ?? []).map((s) => ({
-          server_id: s.server_id,
-          name: s.name,
-          url: s.url ?? null,
-          status: s.status,
-          tool_count: s.tool_count ?? byServer.get(s.name.toLowerCase()) ?? 0,
-          provider_type: (s.provider_type === "native" ? "native" : "external_mcp") as ProviderType,
-          workspace_id: data.workspace_id ?? null,
-        }));
+        const servers = (data.servers ?? []).map((s) => {
+          const tool_count = s.tool_count ?? byServer.get(s.name.toLowerCase()) ?? 0;
+          const live_status =
+            s.live_status ??
+            (s.status === "verified" && !s.last_error
+              ? "connected"
+              : s.status === "failed"
+                ? "error"
+                : "unknown");
+          return {
+            server_id: s.server_id,
+            name: s.name,
+            url: s.url ?? null,
+            status: s.status,
+            tool_count,
+            provider_type: (s.provider_type === "native" ? "native" : "external_mcp") as ProviderType,
+            workspace_id: data.workspace_id ?? null,
+            live_status,
+            verification_status: s.verification_status ?? s.status,
+            health: s.health ?? (live_status === "connected" ? "healthy" : "unknown"),
+            cached_tool_count: s.cached_tool_count ?? tool_count,
+            live_tool_count: s.live_tool_count ?? (live_status === "connected" ? tool_count : 0),
+            using_cached_data: Boolean(s.using_cached_data),
+            last_successful_sync: s.last_successful_sync ?? null,
+            last_health_check: s.last_health_check ?? s.last_checked_at ?? null,
+            last_error: s.last_error ?? null,
+            last_error_code: s.last_error_code ?? null,
+            authentication_status: s.authentication_status ?? "unknown",
+          };
+        });
         return textResult({
           workspace_id: data.workspace_id ?? null,
           count: servers.length,

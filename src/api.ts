@@ -112,6 +112,18 @@ export class McpgramApi {
       status: string;
       tool_count: number;
       provider_type: string;
+      live_status?: string;
+      verification_status?: string;
+      health?: string;
+      cached_tool_count?: number;
+      live_tool_count?: number;
+      using_cached_data?: boolean;
+      last_successful_sync?: string | null;
+      last_health_check?: string | null;
+      last_error?: string | null;
+      last_error_code?: string | null;
+      authentication_status?: string;
+      last_checked_at?: string | null;
     }>;
   }> {
     return this.request("GET", "/api/v1/mcp-servers");
