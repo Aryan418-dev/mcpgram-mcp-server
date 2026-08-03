@@ -93,6 +93,7 @@ export class ToolRegistry {
               toolId: tool.tool_id,
               originalName: tool.name,
               serverName: server.name,
+              serverId: server.server_id,
               description: tool.description?.trim() || `${tool.name} via ${server.name}`,
               inputSchema: normalizeInputSchema(tool.input_schema),
               apiKey: key,

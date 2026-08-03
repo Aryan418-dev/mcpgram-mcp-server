@@ -117,6 +117,29 @@ async function runUpstream(
       ? new McpgramApi(configFromApiKey(entry.apiKey))
       : api;
 
+  // Validate required input fields from schema before upstream call
+  const schema = entry.inputSchema as {
+    required?: string[];
+    properties?: Record<string, unknown>;
+  };
+  const required = Array.isArray(schema?.required) ? schema.required : [];
+  const missing = required.filter((k) => {
+    const v = args[k];
+    return v === undefined || v === null || v === "";
+  });
+  if (missing.length > 0) {
+    return textResult(
+      {
+        success: false,
+        error: `Missing required argument(s): ${missing.join(", ")}`,
+        missing,
+        tool_id: entry.publicId,
+        status: 400,
+      },
+      true
+    );
+  }
+
   try {
     const result = await execApi.execute({
       tool_id: entry.toolId,
@@ -293,20 +316,27 @@ export async function executeUniversalTool(
       if (toolId) {
         t = findTool(catalog, toolId);
       } else if (serverId && toolName) {
+        const sid = serverId.toLowerCase();
+        const tn = toolName.toLowerCase();
+        // Prefer exact serverId match (mcp_servers.id) + tool name
         t = catalog.find(
           (c) =>
-            c.originalName.toLowerCase() === toolName.toLowerCase() &&
-            (c.toolId.includes(serverId) ||
-              c.serverName.toLowerCase().includes(serverId.toLowerCase()) ||
-              c.publicId.toLowerCase().startsWith(slug(serverId)))
+            c.originalName.toLowerCase() === tn &&
+            (c as CatalogEntry & { serverId?: string }).serverId?.toLowerCase() === sid
         );
         if (!t) {
           t = catalog.find(
             (c) =>
-              c.originalName.toLowerCase() === toolName.toLowerCase() &&
-              (c.mcpName.includes(serverId) ||
-                c.serverName.toLowerCase().includes(serverId.toLowerCase()))
+              c.originalName.toLowerCase() === tn &&
+              (c.serverName.toLowerCase().includes(sid) ||
+                c.publicId.toLowerCase().startsWith(slug(serverId)) ||
+                c.mcpName.toLowerCase().includes(sid))
           );
+        }
+        // If still missing, try tool name alone when unique
+        if (!t) {
+          const byName = catalog.filter((c) => c.originalName.toLowerCase() === tn);
+          if (byName.length === 1) t = byName[0];
         }
       }
 
@@ -456,15 +486,36 @@ export async function executeUniversalTool(
           const k = t.serverName.toLowerCase();
           byServer.set(k, (byServer.get(k) ?? 0) + 1);
         }
-        const servers = (data.servers ?? []).map((s) => ({
-          server_id: s.server_id,
-          name: s.name,
-          url: s.url ?? null,
-          status: s.status,
-          tool_count: s.tool_count ?? byServer.get(s.name.toLowerCase()) ?? 0,
-          provider_type: (s.provider_type === "native" ? "native" : "external_mcp") as ProviderType,
-          workspace_id: data.workspace_id ?? null,
-        }));
+        const servers = (data.servers ?? []).map((s) => {
+          const tool_count = s.tool_count ?? byServer.get(s.name.toLowerCase()) ?? 0;
+          const live_status =
+            s.live_status ??
+            (s.status === "verified" && !s.last_error
+              ? "connected"
+              : s.status === "failed"
+                ? "error"
+                : "unknown");
+          return {
+            server_id: s.server_id,
+            name: s.name,
+            url: s.url ?? null,
+            status: s.status,
+            tool_count,
+            provider_type: (s.provider_type === "native" ? "native" : "external_mcp") as ProviderType,
+            workspace_id: data.workspace_id ?? null,
+            live_status,
+            verification_status: s.verification_status ?? s.status,
+            health: s.health ?? (live_status === "connected" ? "healthy" : "unknown"),
+            cached_tool_count: s.cached_tool_count ?? tool_count,
+            live_tool_count: s.live_tool_count ?? (live_status === "connected" ? tool_count : 0),
+            using_cached_data: Boolean(s.using_cached_data),
+            last_successful_sync: s.last_successful_sync ?? null,
+            last_health_check: s.last_health_check ?? s.last_checked_at ?? null,
+            last_error: s.last_error ?? null,
+            last_error_code: s.last_error_code ?? null,
+            authentication_status: s.authentication_status ?? "unknown",
+          };
+        });
         return textResult({
           workspace_id: data.workspace_id ?? null,
           count: servers.length,
@@ -764,9 +815,22 @@ export async function executeUniversalTool(
           description: t.description,
           score,
         }));
-      const apps = [...new Map(catalog.map((t) => [t.app.toLowerCase(), t])).values()]
-        .filter((t) => !query || t.app.toLowerCase().includes(query.toLowerCase()))
-        .map((t) => ({ type: "app", name: t.app, provider_type: t.providerType }));
+      const appHits = new Map<string, { type: string; name: string; provider_type: ProviderType }>();
+      for (const t of catalog) {
+        const key = t.app.toLowerCase();
+        if (query && !t.app.toLowerCase().includes(query.toLowerCase()) && scoreMatch(t, query) <= 0) {
+          continue;
+        }
+        if (!query || t.app.toLowerCase().includes(query.toLowerCase()) || scoreMatch(t, query) > 0) {
+          appHits.set(key, { type: "app", name: t.app, provider_type: t.providerType });
+        }
+      }
+      // Always include apps of matched tools
+      for (const tool of tools) {
+        const src = catalog.find((c) => c.publicId === tool.id);
+        if (src) appHits.set(src.app.toLowerCase(), { type: "app", name: src.app, provider_type: src.providerType });
+      }
+      const apps = [...appHits.values()];
       return textResult({ query, apps, tools });
     }
 

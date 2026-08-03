@@ -36,6 +36,8 @@ export interface ResolvedTool {
   toolId: string;
   originalName: string;
   serverName: string;
+  /** Upstream mcp_servers.id when known. */
+  serverId?: string;
   description: string;
   inputSchema: Record<string, unknown>;
   /** API key that owns this tool (multi-workspace). */
