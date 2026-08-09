@@ -2,9 +2,61 @@ import { signPayload, verifyPayload } from "./crypto.js";
 import type { OAuthClientRecord } from "./types.js";
 
 /**
+ * Allowed redirect URI patterns for Dynamic Client Registration.
+ * Override / extend with OAUTH_ALLOWED_REDIRECT_HOSTS (comma-separated hostnames).
+ */
+const DEFAULT_ALLOWED_HOST_SUFFIXES = [
+  "claude.ai",
+  "anthropic.com",
+  "cursor.com",
+  "cursor.sh",
+  "chatgpt.com",
+  "openai.com",
+  "localhost",
+  "127.0.0.1",
+];
+
+function allowedHostSuffixes(): string[] {
+  const extra = (process.env.OAUTH_ALLOWED_REDIRECT_HOSTS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return [...DEFAULT_ALLOWED_HOST_SUFFIXES, ...extra];
+}
+
+/**
+ * Validate a redirect_uri is https (or localhost http) and host is allowlisted.
+ */
+export function isRedirectUriAllowed(uri: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(uri);
+  } catch {
+    return false;
+  }
+  const host = u.hostname.toLowerCase();
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  if (isLocal) {
+    return u.protocol === "http:" || u.protocol === "https:";
+  }
+  if (u.protocol !== "https:") return false;
+  const suffixes = allowedHostSuffixes();
+  return suffixes.some((suf) => host === suf || host.endsWith(`.${suf}`));
+}
+
+export function assertRedirectUrisAllowed(uris: string[]): void {
+  for (const u of uris) {
+    if (!isRedirectUriAllowed(u)) {
+      throw new Error(
+        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT) or localhost.`
+      );
+    }
+  }
+}
+
+/**
  * Stateless Dynamic Client Registration (RFC 7591).
  * client_id encodes a compact signed registration (redirect_uris + metadata).
- * Single HMAC — avoids double-encoding that blew up URL length for Claude.
  */
 export function registerClient(input: {
   redirect_uris: string[];
@@ -22,6 +74,8 @@ export function registerClient(input: {
       throw new Error(`invalid redirect_uri: ${u}`);
     }
   }
+  assertRedirectUrisAllowed(input.redirect_uris);
+
   const iat = Math.floor(Date.now() / 1000);
   const record: OAuthClientRecord = {
     typ: "client",
