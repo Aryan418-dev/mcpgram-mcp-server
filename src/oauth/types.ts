@@ -24,7 +24,7 @@ export type AuthCodeRecord = {
   user_id: string;
   /** Primary workspace (first selected). Kept for backward compatibility. */
   workspace_id: string;
-  /** Raw MCPGRAM API key for primary workspace. */
+  /** Encrypted MCPGRAM API key for primary workspace. */
   api_key: string;
   /** All selected workspaces (includes primary). */
   workspaces: WorkspaceGrant[];
@@ -40,6 +40,8 @@ export type AccessTokenClaims = {
   api_key: string;
   workspaces: WorkspaceGrant[];
   scope: string;
+  /** Unique token id for revocation. */
+  jti: string;
   iat: number;
   exp: number;
 };
@@ -52,6 +54,10 @@ export type RefreshTokenClaims = {
   api_key: string;
   workspaces: WorkspaceGrant[];
   scope: string;
+  /** Unique token id — rotated on each refresh. */
+  jti: string;
+  /** Stable family id — reuse of a rotated token can kill the family. */
+  fid: string;
   iat: number;
   exp: number;
 };
