@@ -57,11 +57,23 @@ export async function POST(req: Request) {
       );
     }
 
-    const reg = registerClient({
-      redirect_uris: body.redirect_uris,
-      client_name: body.client_name ?? "Claude",
-      token_endpoint_auth_method: body.token_endpoint_auth_method ?? "none",
-    });
+    let reg;
+    try {
+      reg = registerClient({
+        redirect_uris: body.redirect_uris,
+        client_name: body.client_name ?? "Claude",
+        token_endpoint_auth_method: body.token_endpoint_auth_method ?? "none",
+      });
+    } catch (regErr) {
+      const msg = regErr instanceof Error ? regErr.message : String(regErr);
+      if (msg.includes("redirect_uri")) {
+        return Response.json(
+          { error: "invalid_redirect_uri", error_description: msg },
+          { status: 400, headers: CORS }
+        );
+      }
+      throw regErr;
+    }
 
     return Response.json(
       {
