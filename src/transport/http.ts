@@ -88,7 +88,7 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
       );
     }
 
-    const rl = globalRateLimiter.check(token.slice(0, 32));
+    const rl = await globalRateLimiter.check(token);
     if (!rl.allowed) {
       return new Response(
         JSON.stringify({
