@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 
 function secret(): string {
   const s = process.env.OAUTH_JWT_SECRET;
@@ -10,6 +10,11 @@ function secret(): string {
   return s;
 }
 
+/** Derive a 32-byte AES key from the OAuth secret. */
+function aesKey(): Buffer {
+  return createHash("sha256").update(`mcpgram-aes:${secret()}`).digest();
+}
+
 function b64url(buf: Buffer | string): string {
   const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf, "utf8");
   return b.toString("base64url");
@@ -17,6 +22,26 @@ function b64url(buf: Buffer | string): string {
 
 function fromB64url(s: string): Buffer {
   return Buffer.from(s, "base64url");
+}
+
+/** Encrypt a UTF-8 string (AES-256-GCM). Output: enc.<iv>.<tag>.<ciphertext> all base64url. */
+export function encryptSecret(plaintext: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", aesKey(), iv);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc.${b64url(iv)}.${b64url(tag)}.${b64url(ct)}`;
+}
+
+/** Decrypt a value produced by encryptSecret. Pass-through for legacy plaintext. */
+export function decryptSecret(value: string): string {
+  if (!value.startsWith("enc.")) return value; // legacy tokens
+  const parts = value.split(".");
+  if (parts.length !== 4) throw new Error("invalid encrypted secret");
+  const [, ivB, tagB, ctB] = parts;
+  const decipher = createDecipheriv("aes-256-gcm", aesKey(), fromB64url(ivB));
+  decipher.setAuthTag(fromB64url(tagB));
+  return Buffer.concat([decipher.update(fromB64url(ctB)), decipher.final()]).toString("utf8");
 }
 
 /** HMAC-SHA256 sign a JSON payload → compact token. */
@@ -54,4 +79,9 @@ export function randomId(bytes = 16): string {
 
 export function pkceS256(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
+}
+
+/** Hash an opaque string for rate-limit keys (never log the raw value). */
+export function hashKey(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 24);
 }
