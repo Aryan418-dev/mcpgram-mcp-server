@@ -5,6 +5,7 @@ import {
   issueRefreshToken,
   verifyPkceChallenge,
   verifyRefreshToken,
+  rotateRefreshToken,
 } from "../../src/oauth/tokens";
 import { oauthRateLimiter, clientIpFromRequest } from "../../src/middleware/rate-limit";
 
@@ -115,8 +116,11 @@ export async function POST(req: Request) {
     if (grant === "refresh_token") {
       const refresh = body.refresh_token;
       if (!refresh) return oauthError("invalid_request", "refresh_token required");
-      const claims = verifyRefreshToken(refresh);
+      const claims = await verifyRefreshToken(refresh);
       if (!claims) return oauthError("invalid_grant", "Invalid refresh_token");
+
+      // Rotate: invalidate previous refresh jti, keep family id
+      await rotateRefreshToken(claims);
 
       const access = issueAccessToken({
         sub: claims.sub,
@@ -133,6 +137,7 @@ export async function POST(req: Request) {
         api_key: claims.api_key,
         workspaces: claims.workspaces,
         scope: claims.scope,
+        fid: claims.fid,
       });
 
       return Response.json({ ...access, refresh_token, scope: claims.scope }, { headers: CORS });
