@@ -1,4 +1,5 @@
 import { registerClient } from "../../src/oauth/clients";
+import { oauthRateLimiter, clientIpFromRequest } from "../../src/middleware/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,20 @@ export async function OPTIONS() {
 /** RFC 7591 Dynamic Client Registration — Claude.ai uses this. */
 export async function POST(req: Request) {
   try {
+    const rl = await oauthRateLimiter.check(`register:${clientIpFromRequest(req)}`);
+    if (!rl.allowed) {
+      return Response.json(
+        { error: "rate_limit_exceeded", error_description: "Too many registration requests" },
+        {
+          status: 429,
+          headers: {
+            ...CORS,
+            "Retry-After": String(Math.max(1, Math.ceil(rl.retryAfterMs / 1000))),
+          },
+        }
+      );
+    }
+
     if (!process.env.OAUTH_JWT_SECRET || process.env.OAUTH_JWT_SECRET.length < 16) {
       return Response.json(
         {
