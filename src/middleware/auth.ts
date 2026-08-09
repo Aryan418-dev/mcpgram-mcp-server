@@ -49,7 +49,7 @@ export async function resolveSessionFromBearer(token: string): Promise<AuthSessi
   }
 
   try {
-    const claims = verifyAccessToken(token);
+    const claims = await verifyAccessToken(token);
     if (claims?.api_key) {
       const workspaces = claims.workspaces?.length
         ? claims.workspaces
