@@ -12,6 +12,8 @@ const REFRESH_TTL_SEC = 30 * 24 * 3600;
 
 /** In-process consumed auth-code ids (best-effort). Prefer Redis when configured. */
 const consumedCodes = new Map<string, number>();
+/** In-process revoked token ids (jti / fid). */
+const revokedIds = new Map<string, number>();
 
 function getRedis(): { url: string; token: string } | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -42,7 +44,6 @@ export async function markAuthCodeUsed(codeId: string, ttlSec = CODE_TTL_SEC): P
   try {
     const r = getRedis();
     if (r) {
-      // SET key 1 NX EX ttl — returns "OK" if set, null if exists
       const result = await redisCommand(["SET", key, "1", "NX", "EX", ttlSec]);
       return result === "OK";
     }
@@ -50,7 +51,6 @@ export async function markAuthCodeUsed(codeId: string, ttlSec = CODE_TTL_SEC): P
     console.error("[oauth] redis markAuthCodeUsed failed, using memory", err);
   }
   const now = Date.now();
-  // sweep expired
   for (const [id, exp] of consumedCodes) {
     if (exp <= now) consumedCodes.delete(id);
   }
@@ -59,18 +59,51 @@ export async function markAuthCodeUsed(codeId: string, ttlSec = CODE_TTL_SEC): P
   return true;
 }
 
+async function isRevoked(kind: "jti" | "fid", id: string): Promise<boolean> {
+  const key = `oauth:revoked:${kind}:${id}`;
+  try {
+    if (getRedis()) {
+      const v = await redisCommand(["EXISTS", key]);
+      return Number(v) === 1;
+    }
+  } catch (err) {
+    console.error("[oauth] redis isRevoked failed", err);
+  }
+  const exp = revokedIds.get(`${kind}:${id}`);
+  if (!exp) return false;
+  if (exp <= Date.now()) {
+    revokedIds.delete(`${kind}:${id}`);
+    return false;
+  }
+  return true;
+}
+
+/** Revoke a token id (jti) or entire family (fid). */
+export async function revokeTokenId(
+  kind: "jti" | "fid",
+  id: string,
+  ttlSec: number
+): Promise<void> {
+  if (!id) return;
+  const key = `oauth:revoked:${kind}:${id}`;
+  const ttl = Math.max(60, ttlSec);
+  try {
+    if (getRedis()) {
+      await redisCommand(["SET", key, "1", "EX", ttl]);
+      return;
+    }
+  } catch (err) {
+    console.error("[oauth] redis revokeTokenId failed", err);
+  }
+  revokedIds.set(`${kind}:${id}`, Date.now() + ttl * 1000);
+}
+
 function encryptGrant(g: WorkspaceGrant): WorkspaceGrant {
-  return {
-    ...g,
-    api_key: encryptSecret(g.api_key),
-  };
+  return { ...g, api_key: encryptSecret(g.api_key) };
 }
 
 function decryptGrant(g: WorkspaceGrant): WorkspaceGrant {
-  return {
-    ...g,
-    api_key: decryptSecret(g.api_key),
-  };
+  return { ...g, api_key: decryptSecret(g.api_key) };
 }
 
 function normalizeWorkspaces(
@@ -111,16 +144,13 @@ export function issueAuthCode(
   return signPayload(record);
 }
 
-/**
- * Verify auth code signature/expiry, enforce one-time use, decrypt API keys.
- */
 export async function consumeAuthCode(code: string): Promise<AuthCodeRecord | null> {
   const rec = verifyPayload<AuthCodeRecord>(code);
   if (!rec || rec.typ !== "code") return null;
   if (!rec.code_id) return null;
 
   const firstUse = await markAuthCodeUsed(rec.code_id);
-  if (!firstUse) return null; // replay
+  if (!firstUse) return null;
 
   try {
     if (!rec.workspaces || rec.workspaces.length === 0) {
@@ -153,6 +183,7 @@ export function issueAccessToken(input: {
     api_key: primary.api_key,
     workspaces,
     scope: input.scope,
+    jti: randomId(12),
     iat: now,
     exp: now + ACCESS_TTL_SEC,
   };
@@ -170,6 +201,8 @@ export function issueRefreshToken(input: {
   api_key: string;
   workspaces?: WorkspaceGrant[];
   scope: string;
+  /** Reuse family id on rotation; omit to start a new family. */
+  fid?: string;
 }): string {
   const now = Math.floor(Date.now() / 1000);
   const workspaces = normalizeWorkspaces(input).map(encryptGrant);
@@ -182,6 +215,8 @@ export function issueRefreshToken(input: {
     api_key: primary.api_key,
     workspaces,
     scope: input.scope,
+    jti: randomId(12),
+    fid: input.fid || randomId(12),
     iat: now,
     exp: now + REFRESH_TTL_SEC,
   };
@@ -201,19 +236,60 @@ function decryptClaims<T extends AccessTokenClaims | RefreshTokenClaims>(c: T): 
   }
 }
 
-export function verifyAccessToken(token: string): AccessTokenClaims | null {
+export async function verifyAccessToken(token: string): Promise<AccessTokenClaims | null> {
   const c = verifyPayload<AccessTokenClaims>(token);
   if (!c || c.typ !== "access") return null;
+  if (c.jti && (await isRevoked("jti", c.jti))) return null;
   return decryptClaims(c);
 }
 
-export function verifyRefreshToken(token: string): RefreshTokenClaims | null {
+/**
+ * Verify refresh token. On success, caller must rotate (issue new + revoke old jti).
+ * If a rotated (revoked) jti is presented again, the whole family is revoked.
+ */
+export async function verifyRefreshToken(token: string): Promise<RefreshTokenClaims | null> {
   const c = verifyPayload<RefreshTokenClaims>(token);
   if (!c || c.typ !== "refresh") return null;
+
+  // Legacy tokens without jti still work once, then get rotated to jti-bearing ones.
+  if (c.jti) {
+    if (await isRevoked("jti", c.jti)) {
+      // Refresh token reuse → kill family
+      if (c.fid) {
+        const ttl = Math.max(60, (c.exp || 0) - Math.floor(Date.now() / 1000));
+        await revokeTokenId("fid", c.fid, ttl);
+      }
+      return null;
+    }
+  }
+  if (c.fid && (await isRevoked("fid", c.fid))) return null;
+
   return decryptClaims(c);
 }
 
-/** PKCE: S256 only (plain disabled). */
+/** After successful refresh, invalidate the previous refresh jti. */
+export async function rotateRefreshToken(old: RefreshTokenClaims): Promise<void> {
+  if (!old.jti) return;
+  const ttl = Math.max(60, (old.exp || 0) - Math.floor(Date.now() / 1000));
+  await revokeTokenId("jti", old.jti, ttl);
+}
+
+/** RFC 7009-style revoke of access or refresh token. */
+export async function revokePresentedToken(token: string): Promise<void> {
+  const access = verifyPayload<AccessTokenClaims>(token);
+  if (access?.typ === "access" && access.jti) {
+    const ttl = Math.max(60, (access.exp || 0) - Math.floor(Date.now() / 1000));
+    await revokeTokenId("jti", access.jti, ttl);
+    return;
+  }
+  const refresh = verifyPayload<RefreshTokenClaims>(token);
+  if (refresh?.typ === "refresh") {
+    const ttl = Math.max(60, (refresh.exp || 0) - Math.floor(Date.now() / 1000));
+    if (refresh.jti) await revokeTokenId("jti", refresh.jti, ttl);
+    if (refresh.fid) await revokeTokenId("fid", refresh.fid, ttl);
+  }
+}
+
 export function verifyPkceChallenge(
   verifier: string,
   challenge: string,
@@ -222,7 +298,6 @@ export function verifyPkceChallenge(
   if (method === "S256" || method === "sha256" || method === "s256") {
     return pkceS256(verifier) === challenge;
   }
-  // plain intentionally rejected
   return false;
 }
 
