@@ -6,6 +6,7 @@ import {
   verifyPkceChallenge,
   verifyRefreshToken,
 } from "../../src/oauth/tokens";
+import { oauthRateLimiter, clientIpFromRequest } from "../../src/middleware/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,20 @@ function oauthError(error: string, description: string, status = 400) {
 
 export async function POST(req: Request) {
   try {
+    const rl = await oauthRateLimiter.check(`token:${clientIpFromRequest(req)}`);
+    if (!rl.allowed) {
+      return Response.json(
+        { error: "rate_limit_exceeded", error_description: "Too many token requests" },
+        {
+          status: 429,
+          headers: {
+            ...CORS,
+            "Retry-After": String(Math.max(1, Math.ceil(rl.retryAfterMs / 1000))),
+          },
+        }
+      );
+    }
+
     const body = await parseBody(req);
     const grant = body.grant_type;
 
@@ -60,7 +75,7 @@ export async function POST(req: Request) {
       const client = loadClient(client_id);
       if (!client) return oauthError("invalid_client", "Unknown client_id", 401);
 
-      const rec = consumeAuthCode(code);
+      const rec = await consumeAuthCode(code);
       if (!rec) return oauthError("invalid_grant", "Invalid or expired code");
       if (rec.client_id !== client_id) return oauthError("invalid_grant", "client_id mismatch");
       if (rec.redirect_uri !== redirect_uri) {
