@@ -12,12 +12,13 @@ import {
 import { globalRateLimiter } from "../middleware/rate-limit.js";
 import { logger } from "../logger.js";
 import { publicBaseUrl, resourceUrl } from "../oauth/config.js";
+import { reportAgentSeen } from "../agents/track.js";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Accept",
+    "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Accept, X-MCPGRAM-Agent, X-Client-Name",
   "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
 };
 
@@ -65,12 +66,13 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
       JSON.stringify({
         ok: true,
         service: "mcpgram-mcp",
-        version: "1.5.0",
+        version: "1.5.1",
         resource: resourceUrl(req),
         oauth: true,
         authorization_server: "mcpgram",
         platform_tools: true,
         multi_workspace: true,
+        agent_tracking: true,
       }),
       {
         status: 200,
@@ -125,6 +127,10 @@ export async function handleMcpHttpRequest(req: Request): Promise<Response> {
 
   try {
     const config = configFromSession(session);
+
+    // Dashboard AI Agents panel: record this client (Claude / Cursor / …)
+    reportAgentSeen(config, req.headers);
+
     const server = createMcpServer(config);
 
     const transport = new WebStandardStreamableHTTPServerTransport({
