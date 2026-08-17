@@ -12,6 +12,7 @@ const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "cursor.sh",
   "chatgpt.com",
   "openai.com",
+  "manus.im", // Manus AI (https://manus.im/api/webhook/mcp/callback)
   "localhost",
   "127.0.0.1",
 ];
@@ -48,7 +49,7 @@ export function assertRedirectUrisAllowed(uris: string[]): void {
   for (const u of uris) {
     if (!isRedirectUriAllowed(u)) {
       throw new Error(
-        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT) or localhost.`
+        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT, Manus) or localhost.`
       );
     }
   }
