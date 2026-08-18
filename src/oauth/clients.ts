@@ -4,6 +4,10 @@ import type { OAuthClientRecord } from "./types.js";
 /**
  * Allowed redirect URI patterns for Dynamic Client Registration.
  * Override / extend with OAUTH_ALLOWED_REDIRECT_HOSTS (comma-separated hostnames).
+ *
+ * Gemini Spark (gemini.google.com Connected Apps) registers callbacks under
+ * google.com / gemini.google.com / accountlinking.google.com.
+ * Antigravity CLI uses antigravity.google.
  */
 const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "claude.ai",
@@ -12,7 +16,12 @@ const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "cursor.sh",
   "chatgpt.com",
   "openai.com",
-  "manus.im", // Manus AI (https://manus.im/api/webhook/mcp/callback)
+  "manus.im", // Manus AI
+  // Google Gemini Spark + Antigravity / Gemini CLI cloud callbacks
+  "gemini.google.com",
+  "google.com",
+  "accountlinking.google.com",
+  "antigravity.google",
   "localhost",
   "127.0.0.1",
 ];
@@ -49,7 +58,7 @@ export function assertRedirectUrisAllowed(uris: string[]): void {
   for (const u of uris) {
     if (!isRedirectUriAllowed(u)) {
       throw new Error(
-        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT, Manus) or localhost.`
+        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT, Manus, Gemini) or localhost.`
       );
     }
   }
