@@ -1,5 +1,8 @@
 import { publicBaseUrl, resourceUrl } from "./config.js";
 
+/** Canonical product logo (dashboard public asset — high-res brand mark). */
+const BRAND_LOGO = "https://mcpgram.vercel.app/White-logo.png";
+
 /** Official public branding assets (absolute HTTPS). */
 export function branding(req?: Request) {
   const pub = publicBaseUrl(req);
@@ -7,13 +10,16 @@ export function branding(req?: Request) {
   return {
     name: "MCPGRAM",
     client_name: "MCPGRAM",
-    logo_uri: icon512,
-    icon_uri: icon512,
+    // Prefer full brand mark so Claude / Gemini / ChatGPT connector cards show the real logo
+    logo_uri: BRAND_LOGO,
+    icon_uri: BRAND_LOGO,
     icons: [
       { src: `${pub}/favicon-32.png`, sizes: "32x32", type: "image/png" },
       { src: `${pub}/favicon.png`, sizes: "64x64", type: "image/png" },
       { src: `${pub}/favicon-128.png`, sizes: "128x128", type: "image/png" },
       { src: icon512, sizes: "512x512", type: "image/png" },
+      { src: BRAND_LOGO, sizes: "1024x1024", type: "image/png" },
+      { src: "https://mcpgram.vercel.app/Dark-logo.png", sizes: "1024x1024", type: "image/png" },
     ],
   };
 }
@@ -39,10 +45,8 @@ export function authorizationServerMetadata(req?: Request) {
     code_challenge_methods_supported: ["S256"],
     subject_types_supported: ["public"],
     service_documentation: `${pub}/`,
-    // Branding (Claude + other hosts may surface logo via favicon or these fields)
     op_policy_uri: `${pub}/`,
     op_tos_uri: `${pub}/`,
-    // Non-standard but widely probed for connector display
     logo_uri: brand.logo_uri,
     client_name: brand.name,
   };
@@ -60,8 +64,6 @@ export function protectedResourceMetadata(req?: Request) {
     bearer_methods_supported: ["header"],
     scopes_supported: ["mcp", "openid", "profile", "email", "offline_access"],
     resource_documentation: `${pub}/`,
-    // Display name + icon for connector UIs (Claude uses Google favicon of resource host;
-    // also include explicit fields for hosts that read them)
     resource_name: brand.name,
     logo_uri: brand.logo_uri,
     icons: brand.icons,
