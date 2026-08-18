@@ -5,9 +5,8 @@ import type { OAuthClientRecord } from "./types.js";
  * Allowed redirect URI patterns for Dynamic Client Registration.
  * Override / extend with OAUTH_ALLOWED_REDIRECT_HOSTS (comma-separated hostnames).
  *
- * Gemini Spark (gemini.google.com Connected Apps) registers callbacks under
- * google.com / gemini.google.com / accountlinking.google.com.
- * Antigravity CLI uses antigravity.google.
+ * Gemini Spark registers callbacks under google.com hosts AND
+ * oauth-redirect.googleusercontent.com / *.googleapis.com (not under google.com).
  */
 const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "claude.ai",
@@ -16,12 +15,15 @@ const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "cursor.sh",
   "chatgpt.com",
   "openai.com",
-  "manus.im", // Manus AI
-  // Google Gemini Spark + Antigravity / Gemini CLI cloud callbacks
+  "manus.im",
+  // Google Gemini Spark / Antigravity / account linking
   "gemini.google.com",
   "google.com",
   "accountlinking.google.com",
   "antigravity.google",
+  // Google OAuth redirect infrastructure (separate eTLD+1 from google.com)
+  "googleusercontent.com",
+  "googleapis.com",
   "localhost",
   "127.0.0.1",
 ];
