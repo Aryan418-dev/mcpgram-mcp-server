@@ -7,6 +7,9 @@ import type { OAuthClientRecord } from "./types.js";
  *
  * Gemini Spark registers callbacks under google.com hosts AND
  * oauth-redirect.googleusercontent.com / *.googleapis.com (not under google.com).
+ *
+ * Grok (xAI) custom connectors on grok.com use OAuth DCR with callbacks under
+ * grok.com / x.ai (and related auth hosts).
  */
 const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "claude.ai",
@@ -16,6 +19,12 @@ const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "chatgpt.com",
   "openai.com",
   "manus.im",
+  // Grok / xAI (grok.com connectors + Grok Build / accounts)
+  "grok.com",
+  "x.ai",
+  "x.ai",
+  "accounts.x.ai",
+  "auth.x.ai",
   // Google Gemini Spark / Antigravity / account linking
   "gemini.google.com",
   "google.com",
@@ -60,7 +69,7 @@ export function assertRedirectUrisAllowed(uris: string[]): void {
   for (const u of uris) {
     if (!isRedirectUriAllowed(u)) {
       throw new Error(
-        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT, Manus, Gemini) or localhost.`
+        `redirect_uri not allowed: ${u}. Use a known agent callback (Claude, Cursor, ChatGPT, Manus, Gemini, Grok) or localhost.`
       );
     }
   }
