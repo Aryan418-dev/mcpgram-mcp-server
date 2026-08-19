@@ -9,7 +9,7 @@ import type { OAuthClientRecord } from "./types.js";
  * oauth-redirect.googleusercontent.com / *.googleapis.com (not under google.com).
  *
  * Grok (xAI) custom connectors on grok.com use OAuth DCR with callbacks under
- * grok.com / x.ai (and related auth hosts).
+ * grok.com / x.ai (accounts.x.ai, auth.x.ai covered by x.ai suffix).
  */
 const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "claude.ai",
@@ -19,12 +19,9 @@ const DEFAULT_ALLOWED_HOST_SUFFIXES = [
   "chatgpt.com",
   "openai.com",
   "manus.im",
-  // Grok / xAI (grok.com connectors + Grok Build / accounts)
+  // Grok / xAI (grok.com connectors + Grok Build)
   "grok.com",
   "x.ai",
-  "x.ai",
-  "accounts.x.ai",
-  "auth.x.ai",
   // Google Gemini Spark / Antigravity / account linking
   "gemini.google.com",
   "google.com",
