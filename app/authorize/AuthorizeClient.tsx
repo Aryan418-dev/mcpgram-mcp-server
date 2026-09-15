@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type Session } from "@supabase/supabase-js";
 import { PERMISSIONS, styles } from "./consentStyles";
 
 type Props = {
@@ -14,33 +14,15 @@ type Props = {
 
 type Workspace = { id: string; name: string };
 
-const MCPGRAM_LOGO_SRC = "/icon-512.png";
-const MCPGRAM_LOGO_WHITE_SRC = "/icon-512.png";
-
-function McpgramLogoMark() {
-  const [src, setSrc] = useState(MCPGRAM_LOGO_WHITE_SRC);
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <svg width={32} height={32} viewBox="0 0 32 32" fill="none" aria-label="MCPGRAM">
-        <rect x="4" y="4" width="10" height="10" rx="2" fill="#cffe25" />
-        <rect x="18" y="4" width="10" height="10" rx="2" fill="#cffe25" opacity={0.75} />
-        <rect x="4" y="18" width="10" height="10" rx="2" fill="#cffe25" opacity={0.75} />
-        <rect x="18" y="18" width="10" height="10" rx="2" fill="#cffe25" />
-      </svg>
-    );
-  }
+/** Crisp vector mark — always sharp at any size */
+function McpgramLogoMark({ size = 34 }: { size?: number }) {
   return (
     <img
-      src={src}
+      src="/brand/mcpgram-mark.svg"
       alt="MCPGRAM"
-      width={36}
-      height={36}
+      width={size}
+      height={size}
       style={{ display: "block", objectFit: "contain" }}
-      onError={() => {
-        if (src !== MCPGRAM_LOGO_SRC) setSrc(MCPGRAM_LOGO_SRC);
-        else setFailed(true);
-      }}
     />
   );
 }
@@ -66,6 +48,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +62,12 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     return createClient(supabaseUrl, supabaseAnonKey);
   }
 
+  function applySession(session: Session | null) {
+    const u = session?.user;
+    setUser(u ? { id: u.id, email: u.email } : null);
+    setAccessToken(session?.access_token ?? null);
+  }
+
   useEffect(() => {
     if (!supabaseUrl || !supabaseAnonKey) {
       setError("Server misconfiguration: Supabase env vars missing");
@@ -87,19 +76,17 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     }
     const client = sb();
     client.auth.getSession().then(({ data }) => {
-      const u = data.session?.user;
-      if (u) setUser({ id: u.id, email: u.email });
+      applySession(data.session);
       setSessionReady(true);
     });
     const { data: sub } = client.auth.onAuthStateChange((_e, session) => {
-      const u = session?.user;
-      setUser(u ? { id: u.id, email: u.email } : null);
+      applySession(session);
     });
     return () => sub.subscription.unsubscribe();
   }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !accessToken) {
       setWorkspaces([]);
       setSelected({});
       return;
@@ -107,13 +94,16 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/oauth/workspaces", { credentials: "include" });
+        const res = await fetch("/api/oauth/workspaces", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) {
           setError(data.error || `Failed to load workspaces (${res.status})`);
           return;
         }
+        setError(null);
         const list: Workspace[] = Array.isArray(data.workspaces) ? data.workspaces : [];
         setWorkspaces(list);
         const next: Record<string, boolean> = {};
@@ -126,7 +116,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, accessToken]);
 
   useEffect(() => {
     if (!success || !redirectUrl) return;
@@ -162,7 +152,10 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     setError(null);
     setBusy(true);
     try {
-      const { error: err } = await sb().auth.signInWithPassword({ email: email.trim(), password });
+      const { error: err } = await sb().auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
       if (err) setError(err.message);
     } catch (err: any) {
       setError(err?.message || "Sign-in failed");
@@ -184,14 +177,16 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
   }
 
   async function approve() {
-    if (busy || selectedIds.length === 0 || success) return;
+    if (busy || selectedIds.length === 0 || success || !accessToken) return;
     setError(null);
     setBusy(true);
     try {
       const res = await fetch("/api/oauth/approve", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           ...params,
           workspace_ids: selectedIds,
@@ -203,8 +198,10 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
         setBusy(false);
         return;
       }
-      if (data.redirect_url) {
-        setRedirectUrl(data.redirect_url);
+      // API returns `redirect` (not redirect_url)
+      const nextUrl = data.redirect || data.redirect_url;
+      if (nextUrl) {
+        setRedirectUrl(nextUrl);
         setSuccess(true);
       } else {
         setError("Missing redirect URL");
@@ -224,7 +221,12 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     );
   }
 
-  if (params.response_type !== "code" || !params.client_id || !params.redirect_uri || !params.code_challenge) {
+  if (
+    params.response_type !== "code" ||
+    !params.client_id ||
+    !params.redirect_uri ||
+    !params.code_challenge
+  ) {
     return (
       <main style={styles.page}>
         <h1 style={styles.title}>Invalid authorization request</h1>
@@ -258,8 +260,6 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
         .mcp-tile:nth-child(4) { animation-delay: 0.36s; }
         .mcp-tile:nth-child(5) { animation-delay: 0.48s; }
         .mcp-tile:nth-child(6) { animation-delay: 0.6s; }
-        .mcp-tile:nth-child(7) { animation-delay: 0.72s; }
-        .mcp-tile:nth-child(8) { animation-delay: 0.84s; }
         .success-check {
           animation: successPop 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards,
                      successGlow 1.2s ease-out 0.2s 2;
@@ -278,7 +278,6 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
             }}
           />
           <div style={styles.header}>
-            {/* Agent LEFT → MCPGRAM RIGHT */}
             <div style={styles.logoBox} title={appName}>
               {clientLogoUrl && !logoFailed ? (
                 <img
