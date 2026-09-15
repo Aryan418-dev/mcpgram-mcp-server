@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient, type SupabaseClient, type Session } from "@supabase/supabase-js";
 import { PERMISSIONS, styles } from "./consentStyles";
@@ -14,16 +14,23 @@ type Props = {
 
 type Workspace = { id: string; name: string };
 
-/** Crisp vector mark — always sharp at any size */
+/** Inline vector mark — always sharp, no network, transparent bg for dark tiles */
 function McpgramLogoMark({ size = 34 }: { size?: number }) {
   return (
-    <img
-      src="/brand/mcpgram-mark.svg"
-      alt="MCPGRAM"
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 64 64"
       width={size}
       height={size}
-      style={{ display: "block", objectFit: "contain" }}
-    />
+      role="img"
+      aria-label="MCPGRAM"
+      style={{ display: "block" }}
+    >
+      <rect x="8" y="8" width="20" height="20" rx="5" fill="#cffe25" />
+      <rect x="36" y="8" width="20" height="20" rx="5" fill="#cffe25" opacity="0.78" />
+      <rect x="8" y="36" width="20" height="20" rx="5" fill="#cffe25" opacity="0.78" />
+      <rect x="36" y="36" width="20" height="20" rx="5" fill="#cffe25" />
+    </svg>
   );
 }
 
@@ -44,6 +51,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
   );
 
   const appName = (clientName && clientName.trim()) || "Application";
+  const clientRef = useRef<SupabaseClient | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,9 +65,19 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
   const [success, setSuccess] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [loadingWs, setLoadingWs] = useState(false);
 
-  function sb(): SupabaseClient {
-    return createClient(supabaseUrl, supabaseAnonKey);
+  function getClient(): SupabaseClient {
+    if (!clientRef.current) {
+      clientRef.current = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+    }
+    return clientRef.current;
   }
 
   function applySession(session: Session | null) {
@@ -68,13 +86,29 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     setAccessToken(session?.access_token ?? null);
   }
 
+  /** Always prefer a fresh session token right before API calls */
+  async function resolveToken(): Promise<string | null> {
+    if (accessToken && accessToken.length > 20) return accessToken;
+    try {
+      const { data } = await getClient().auth.getSession();
+      const t = data.session?.access_token ?? null;
+      if (t) {
+        applySession(data.session);
+        return t;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (!supabaseUrl || !supabaseAnonKey) {
       setError("Server misconfiguration: Supabase env vars missing");
       setSessionReady(true);
       return;
     }
-    const client = sb();
+    const client = getClient();
     client.auth.getSession().then(({ data }) => {
       applySession(data.session);
       setSessionReady(true);
@@ -83,24 +117,44 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
       applySession(session);
     });
     return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
-    if (!user || !accessToken) {
+    if (!user) {
       setWorkspaces([]);
       setSelected({});
       return;
     }
     let cancelled = false;
     (async () => {
+      setLoadingWs(true);
       try {
+        const token = await resolveToken();
+        if (!token) {
+          if (!cancelled) {
+            setError("Session expired — please sign in again");
+            setWorkspaces([]);
+          }
+          return;
+        }
         const res = await fetch("/api/oauth/workspaces", {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          method: "GET",
+          credentials: "same-origin",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) {
-          setError(data.error || `Failed to load workspaces (${res.status})`);
+          const msg =
+            data.detail && data.error
+              ? `${data.error}: ${data.detail}`
+              : data.error || `Failed to load workspaces (${res.status})`;
+          setError(msg);
+          setWorkspaces([]);
           return;
         }
         setError(null);
@@ -111,11 +165,14 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
         setSelected(next);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load workspaces");
+      } finally {
+        if (!cancelled) setLoadingWs(false);
       }
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, accessToken]);
 
   useEffect(() => {
@@ -126,7 +183,10 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     return () => clearTimeout(t);
   }, [success, redirectUrl]);
 
-  const selectedIds = useMemo(() => Object.keys(selected).filter((id) => selected[id]), [selected]);
+  const selectedIds = useMemo(
+    () => Object.keys(selected).filter((id) => selected[id]),
+    [selected]
+  );
 
   async function signInProvider(provider: "google" | "github") {
     if (success) return;
@@ -134,7 +194,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     setBusy(true);
     try {
       const redirectTo = window.location.href;
-      const { error: err } = await sb().auth.signInWithOAuth({
+      const { error: err } = await getClient().auth.signInWithOAuth({
         provider,
         options: { redirectTo },
       });
@@ -152,7 +212,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     setError(null);
     setBusy(true);
     try {
-      const { error: err } = await sb().auth.signInWithPassword({
+      const { error: err } = await getClient().auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -177,15 +237,23 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
   }
 
   async function approve() {
-    if (busy || selectedIds.length === 0 || success || !accessToken) return;
+    if (busy || selectedIds.length === 0 || success) return;
     setError(null);
     setBusy(true);
     try {
+      const token = await resolveToken();
+      if (!token) {
+        setError("Session expired — please sign in again");
+        setBusy(false);
+        return;
+      }
       const res = await fetch("/api/oauth/approve", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
         body: JSON.stringify({
           ...params,
@@ -194,11 +262,10 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || `Authorization failed (${res.status})`);
+        setError(data.error || data.detail || `Authorization failed (${res.status})`);
         setBusy(false);
         return;
       }
-      // API returns `redirect` (not redirect_url)
       const nextUrl = data.redirect || data.redirect_url;
       if (nextUrl) {
         setRedirectUrl(nextUrl);
@@ -417,8 +484,21 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
                     {selectedIds.length === workspaces.length ? "Deselect all" : "Select all"}
                   </button>
                 </div>
-                {workspaces.length === 0 ? (
-                  <p style={styles.mute}>No workspaces found.</p>
+                {loadingWs ? (
+                  <p style={styles.mute}>Loading workspaces…</p>
+                ) : workspaces.length === 0 ? (
+                  <p style={styles.mute}>
+                    No workspaces found. Create one at{" "}
+                    <a
+                      href="https://mcpgram.vercel.app/dashboard"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#cffe25" }}
+                    >
+                      mcpgram.vercel.app
+                    </a>
+                    .
+                  </p>
                 ) : (
                   <div style={styles.checkboxList} role="group" aria-label="Workspaces">
                     {workspaces.map((w) => {
@@ -529,8 +609,12 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
                     <button
                       type="button"
                       style={styles.btnSecondary}
-                      onClick={() => sb().auth.signOut()}
                       disabled={busy}
+                      onClick={() => {
+                        window.location.href = params.redirect_uri
+                          ? `${params.redirect_uri}${params.redirect_uri.includes("?") ? "&" : "?"}error=access_denied${params.state ? `&state=${encodeURIComponent(params.state)}` : ""}`
+                          : "/";
+                      }}
                     >
                       Cancel
                     </button>
@@ -540,11 +624,19 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
             </>
           )}
 
-          {error && (
-            <p style={styles.error} role="alert">
+          {error ? (
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 13,
+                color: "#f87171",
+                textAlign: "center",
+                wordBreak: "break-word",
+              }}
+            >
               {error}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </main>
