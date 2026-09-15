@@ -1,1 +1,1 @@
-SEE_FILE
+LOAD_FROM_/tmp/AuthorizeClient_slim.tsx
