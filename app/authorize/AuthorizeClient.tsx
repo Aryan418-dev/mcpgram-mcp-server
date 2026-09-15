@@ -23,10 +23,10 @@ function McpgramLogoMark() {
   if (failed) {
     return (
       <svg width={32} height={32} viewBox="0 0 32 32" fill="none" aria-label="MCPGRAM">
-        <rect x="4" y="4" width="10" height="10" rx="2" fill="#FFFFFF" />
-        <rect x="18" y="4" width="10" height="10" rx="2" fill="#FFFFFF" opacity={0.85} />
-        <rect x="4" y="18" width="10" height="10" rx="2" fill="#FFFFFF" opacity={0.85} />
-        <rect x="18" y="18" width="10" height="10" rx="2" fill="#FFFFFF" />
+        <rect x="4" y="4" width="10" height="10" rx="2" fill="#cffe25" />
+        <rect x="18" y="4" width="10" height="10" rx="2" fill="#cffe25" opacity={0.75} />
+        <rect x="4" y="18" width="10" height="10" rx="2" fill="#cffe25" opacity={0.75} />
+        <rect x="18" y="18" width="10" height="10" rx="2" fill="#cffe25" />
       </svg>
     );
   }
@@ -235,7 +235,8 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
 
   return (
     <main style={styles.page}>
-      <style>{`
+      <div style={styles.shell}>
+        <style>{`
         @keyframes tileFlow {
           0% { opacity: 0.2; transform: translateY(0); }
           50% { opacity: 1; transform: translateY(-2px); }
@@ -247,8 +248,8 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
           100% { transform: scale(1); opacity: 1; }
         }
         @keyframes successGlow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35); }
-          50% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(207, 254, 37, 0.35); }
+          50% { box-shadow: 0 0 0 10px rgba(207, 254, 37, 0); }
         }
         .mcp-tile { animation: tileFlow 2.2s ease-in-out infinite; }
         .mcp-tile:nth-child(1) { animation-delay: 0s; }
@@ -265,222 +266,288 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
         }
       `}</style>
 
-      <div style={styles.header}>
-        <div style={styles.logoBox} title={appName}>
-          {clientLogoUrl && !logoFailed ? (
-            <img
-              src={clientLogoUrl}
-              alt={appName}
-              width={36}
-              height={36}
-              style={{ display: "block", objectFit: "contain", borderRadius: 10 }}
-              onError={() => setLogoFailed(true)}
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div style={styles.clientInitial}>{appName.slice(0, 1).toUpperCase()}</div>
-          )}
-        </div>
-
-        <div style={styles.connector} aria-hidden>
-          {success ? (
-            <div className="success-check" style={styles.successRing}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M5 13l4 4L19 7" stroke="#22d3ee" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          ) : (
-            <div style={styles.tileRow}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <span
-                  key={i}
-                  className={!busy ? "mcp-tile" : undefined}
-                  style={{
-                    width: 6,
-                    height: 6,
-                    background: "rgba(34,211,238,0.85)",
-                    borderRadius: 1.5,
-                    display: "inline-block",
-                    opacity: busy ? 0.35 : undefined,
-                  }}
+        <div style={styles.headerBand}>
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(ellipse 70% 90% at 50% 0%, rgba(255,255,255,0.06) 0%, transparent 55%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div style={styles.header}>
+            {/* Agent LEFT → MCPGRAM RIGHT */}
+            <div style={styles.logoBox} title={appName}>
+              {clientLogoUrl && !logoFailed ? (
+                <img
+                  src={clientLogoUrl}
+                  alt={appName}
+                  width={34}
+                  height={34}
+                  style={{ display: "block", objectFit: "contain", borderRadius: 10 }}
+                  onError={() => setLogoFailed(true)}
+                  referrerPolicy="no-referrer"
                 />
-              ))}
+              ) : (
+                <div style={styles.clientInitial}>{appName.slice(0, 1).toUpperCase()}</div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div style={styles.logoBox} title="MCPGRAM">
-          <McpgramLogoMark />
-        </div>
-      </div>
+            <div style={styles.connector} aria-hidden>
+              {success ? (
+                <div className="success-check" style={styles.successRing}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M5 13l4 4L19 7"
+                      stroke="#cffe25"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              ) : (
+                <div style={styles.tileRow}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={!busy ? "mcp-tile" : undefined}
+                      style={{
+                        width: 5,
+                        height: 5,
+                        background: "rgba(207,254,37,0.85)",
+                        borderRadius: 1.5,
+                        display: "inline-block",
+                        opacity: busy ? 0.35 : undefined,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
-      <h1 style={styles.title}>
-        {success ? "Successfully Connected" : `Connect ${appName} to MCPGRAM`}
-      </h1>
-      <p style={styles.subtitle}>
-        {success
-          ? `${appName} can now securely access your MCPGRAM workspace.`
-          : `Choose which workspaces ${appName} can access.`}
-      </p>
-
-      {!user ? (
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>Sign in</h2>
-          <div style={{ display: "flex", gap: 10, marginBottom: 18, marginTop: 12 }}>
-            <button type="button" style={styles.btnSecondary} disabled={busy} onClick={() => signInProvider("google")}>
-              Google
-            </button>
-            <button type="button" style={styles.btnSecondary} disabled={busy} onClick={() => signInProvider("github")}>
-              GitHub
-            </button>
+            <div style={styles.logoBox} title="MCPGRAM">
+              <McpgramLogoMark />
+            </div>
           </div>
-          <form onSubmit={signInEmail}>
-            <label style={styles.label}>
-              Email
-              <input
-                style={styles.input}
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-            </label>
-            <label style={styles.label}>
-              Password
-              <input
-                style={styles.input}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button type="submit" style={styles.btnPrimary} disabled={busy}>
-              {busy ? "Signing in…" : "Continue with email"}
-            </button>
-          </form>
         </div>
-      ) : (
-        <>
-          <p style={{ ...styles.mute, marginBottom: 16, fontSize: 13, textAlign: "center" }}>
-            Signed in as <span style={{ color: "#FAFAFA" }}>{user.email ?? user.id}</span>
+
+        <div style={styles.body}>
+          <h1 style={styles.title}>
+            {success ? "Successfully Connected" : `Connect ${appName} to MCPGRAM`}
+          </h1>
+          <p style={styles.subtitle}>
+            {success
+              ? `${appName} can now securely access your MCPGRAM workspace.`
+              : `Choose which workspaces ${appName} can access.`}
           </p>
 
-          <div style={{ ...styles.card, opacity: success ? 0.55 : 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={styles.cardTitle}>Choose Workspace</span>
-              <button
-                type="button"
-                style={styles.selectAllBtn}
-                disabled={workspaces.length === 0 || success}
-                onClick={() => selectAll(selectedIds.length !== workspaces.length)}
-              >
-                {selectedIds.length === workspaces.length ? "Deselect all" : "Select all"}
-              </button>
-            </div>
-            {workspaces.length === 0 ? (
-              <p style={styles.mute}>No workspaces found.</p>
-            ) : (
-              <div style={styles.checkboxList} role="group" aria-label="Workspaces">
-                {workspaces.map((w) => {
-                  const id = w.id;
-                  const checked = !!selected[id];
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => toggleWorkspace(id)}
-                      disabled={success}
-                      style={{
-                        ...styles.wsRow,
-                        borderColor: checked ? "#22d3ee" : "rgba(148,163,184,0.25)",
-                        background: checked ? "rgba(34,211,238,0.08)" : "transparent",
-                        cursor: success ? "default" : "pointer",
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 6,
-                          border: checked ? "1.5px solid #22d3ee" : "1.5px solid rgba(148,163,184,0.35)",
-                          background: checked ? "#22d3ee" : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          marginTop: 1,
-                        }}
-                      >
-                        {checked ? (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2.5 6.5L5 9L9.5 3.5" stroke="#07080c" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        ) : null}
-                      </span>
-                      <span style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
-                        <span style={{ color: "#FAFAFA", fontWeight: 500, display: "block" }}>{w.name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "rgba(161,161,170,0.75)", marginTop: 2, wordBreak: "break-all" }}>{id}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div style={{ ...styles.card, marginTop: 12, opacity: success ? 0.55 : 1 }}>
-            <div style={{ ...styles.cardTitle, marginBottom: 12 }}>Permissions</div>
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {PERMISSIONS.map((p) => (
-                <li key={p} style={styles.permRow}>
-                  <span style={styles.checkIcon} aria-hidden>✓</span>
-                  <span>{p}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            {success ? (
-              <button type="button" style={styles.btnPrimary} disabled>
-                Connected
-              </button>
-            ) : (
-              <>
+          {!user ? (
+            <div style={styles.card}>
+              <h2 style={styles.cardTitle}>Sign in</h2>
+              <div style={{ display: "flex", gap: 10, marginBottom: 18, marginTop: 12 }}>
                 <button
                   type="button"
-                  style={{
-                    ...styles.btnPrimary,
-                    opacity: busy || selectedIds.length === 0 ? 0.5 : 1,
-                    cursor: busy || selectedIds.length === 0 ? "not-allowed" : "pointer",
-                  }}
-                  disabled={busy || selectedIds.length === 0}
-                  onClick={approve}
+                  style={styles.btnSecondary}
+                  disabled={busy}
+                  onClick={() => signInProvider("google")}
                 >
-                  {busy
-                    ? "Authorizing…"
-                    : selectedIds.length <= 1
-                      ? "Authorize"
-                      : `Authorize ${selectedIds.length} workspaces`}
+                  Google
                 </button>
-                <button type="button" style={styles.btnSecondary} onClick={() => sb().auth.signOut()} disabled={busy}>
-                  Cancel
+                <button
+                  type="button"
+                  style={styles.btnSecondary}
+                  disabled={busy}
+                  onClick={() => signInProvider("github")}
+                >
+                  GitHub
                 </button>
-              </>
-            )}
-          </div>
-        </>
-      )}
+              </div>
+              <form onSubmit={signInEmail}>
+                <label style={styles.label}>
+                  Email
+                  <input
+                    style={styles.input}
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+                <label style={styles.label}>
+                  Password
+                  <input
+                    style={styles.input}
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
+                <button type="submit" style={styles.btnPrimary} disabled={busy}>
+                  {busy ? "Signing in…" : "Continue with email"}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <>
+              <p style={{ ...styles.mute, marginBottom: 16, fontSize: 13, textAlign: "center" }}>
+                Signed in as <span style={{ color: "#FAFAFA" }}>{user.email ?? user.id}</span>
+              </p>
 
-      {error && (
-        <p style={styles.error} role="alert">
-          {error}
-        </p>
-      )}
+              <div style={{ ...styles.card, opacity: success ? 0.55 : 1 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <span style={styles.cardTitle}>Choose Workspace</span>
+                  <button
+                    type="button"
+                    style={styles.selectAllBtn}
+                    disabled={workspaces.length === 0 || success}
+                    onClick={() => selectAll(selectedIds.length !== workspaces.length)}
+                  >
+                    {selectedIds.length === workspaces.length ? "Deselect all" : "Select all"}
+                  </button>
+                </div>
+                {workspaces.length === 0 ? (
+                  <p style={styles.mute}>No workspaces found.</p>
+                ) : (
+                  <div style={styles.checkboxList} role="group" aria-label="Workspaces">
+                    {workspaces.map((w) => {
+                      const id = w.id;
+                      const checked = !!selected[id];
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => toggleWorkspace(id)}
+                          disabled={success}
+                          style={{
+                            ...styles.wsRow,
+                            borderColor: checked ? "#cffe25" : "rgba(148,163,184,0.25)",
+                            background: checked ? "rgba(207,254,37,0.10)" : "transparent",
+                            cursor: success ? "default" : "pointer",
+                          }}
+                        >
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 6,
+                              border: checked
+                                ? "1.5px solid #cffe25"
+                                : "1.5px solid rgba(148,163,184,0.35)",
+                              background: checked ? "#cffe25" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              marginTop: 1,
+                            }}
+                          >
+                            {checked ? (
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path
+                                  d="M2.5 6.5L5 9L9.5 3.5"
+                                  stroke="#07080c"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            ) : null}
+                          </span>
+                          <span style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+                            <span style={{ color: "#FAFAFA", fontWeight: 500, display: "block" }}>
+                              {w.name}
+                            </span>
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: 11,
+                                color: "rgba(161,161,170,0.75)",
+                                marginTop: 2,
+                                wordBreak: "break-all",
+                              }}
+                            >
+                              {id}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ ...styles.card, marginTop: 12, opacity: success ? 0.55 : 1 }}>
+                <div style={{ ...styles.cardTitle, marginBottom: 12 }}>Permissions</div>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {PERMISSIONS.map((p) => (
+                    <li key={p} style={styles.permRow}>
+                      <span style={styles.checkIcon} aria-hidden>
+                        ✓
+                      </span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                {success ? (
+                  <button type="button" style={styles.btnPrimary} disabled>
+                    Connected
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.btnPrimary,
+                        opacity: busy || selectedIds.length === 0 ? 0.5 : 1,
+                        cursor: busy || selectedIds.length === 0 ? "not-allowed" : "pointer",
+                      }}
+                      disabled={busy || selectedIds.length === 0}
+                      onClick={approve}
+                    >
+                      {busy
+                        ? "Authorizing…"
+                        : selectedIds.length <= 1
+                          ? "Authorize"
+                          : `Authorize ${selectedIds.length} workspaces`}
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.btnSecondary}
+                      onClick={() => sb().auth.signOut()}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {error && (
+            <p style={styles.error} role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
