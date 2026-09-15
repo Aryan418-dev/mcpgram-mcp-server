@@ -6,9 +6,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Resolve a display logo for the OAuth client.
- * Claude does not currently send logo_uri in DCR, so we infer from name / redirect hosts.
- * Prefer public CDN icons that allow cross-origin embedding (no need to host logos yourself).
+ * Resolve a display logo for the OAuth client (web agents, CLI agents, IDEs).
+ * Uses the same premium marks as install guides (LobeHub / Devicon / favicons).
  */
 function resolveClientLogo(opts: {
   clientName?: string;
@@ -25,22 +24,83 @@ function resolveClientLogo(opts: {
     })
     .filter(Boolean);
 
-  const isClaude =
-    name.includes("claude") ||
-    hosts.some((h) => h === "claude.ai" || h.endsWith(".claude.ai"));
+  const LOBE = "https://unpkg.com/@lobehub/icons-static-svg@1.94.0/icons";
 
-  if (isClaude) {
-    // Google favicon CDN — CORS/CORP friendly for <img>
-    return "https://www.google.com/s2/favicons?domain=claude.ai&sz=128";
+  const rules: { test: () => boolean; logo: string }[] = [
+    {
+      test: () =>
+        name.includes("claude") ||
+        hosts.some((h) => h === "claude.ai" || h.endsWith(".claude.ai")),
+      logo: `${LOBE}/claude-color.svg`,
+    },
+    {
+      test: () => name.includes("cursor") || hosts.some((h) => h.includes("cursor")),
+      logo: `${LOBE}/cursor.svg`,
+    },
+    {
+      test: () =>
+        name.includes("chatgpt") ||
+        name.includes("openai") ||
+        hosts.some((h) => h.includes("openai") || h.includes("chatgpt")),
+      logo: `${LOBE}/openai.svg`,
+    },
+    {
+      test: () => name.includes("codex"),
+      logo: `${LOBE}/codex-color.svg`,
+    },
+    {
+      test: () =>
+        name.includes("gemini") || hosts.some((h) => h.includes("gemini") || h.includes("google")),
+      logo: `${LOBE}/gemini-color.svg`,
+    },
+    {
+      test: () =>
+        name.includes("grok") ||
+        name.includes("xai") ||
+        hosts.some((h) => h.includes("x.ai") || h.includes("grok")),
+      logo: `${LOBE}/grok.svg`,
+    },
+    {
+      test: () => name.includes("windsurf") || name.includes("cascade") || name.includes("codeium"),
+      logo: `${LOBE}/windsurf-color.svg`,
+    },
+    {
+      test: () =>
+        name.includes("vscode") ||
+        name.includes("vs code") ||
+        name.includes("visual studio"),
+      logo: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg",
+    },
+    {
+      test: () => name.includes("copilot") || name.includes("github"),
+      logo: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/github/github-original.svg",
+    },
+    {
+      test: () => name.includes("manus") || hosts.some((h) => h.includes("manus")),
+      logo: "https://www.google.com/s2/favicons?domain=manus.im&sz=128",
+    },
+    {
+      test: () => name.includes("cline"),
+      logo: "https://avatars.githubusercontent.com/u/184127137?s=128&v=4",
+    },
+    {
+      test: () => name.includes("continue"),
+      logo: "https://avatars.githubusercontent.com/u/105342031?s=128&v=4",
+    },
+    {
+      test: () => name.includes("zed"),
+      logo: "https://avatars.githubusercontent.com/u/79386116?s=128&v=4",
+    },
+    {
+      test: () => name.includes("jetbrains") || name.includes("junie"),
+      logo: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/jetbrains/jetbrains-original.svg",
+    },
+  ];
+
+  for (const r of rules) {
+    if (r.test()) return r.logo;
   }
 
-  const isCursor =
-    name.includes("cursor") || hosts.some((h) => h.includes("cursor"));
-  if (isCursor) {
-    return "https://www.google.com/s2/favicons?domain=cursor.com&sz=128";
-  }
-
-  // Generic fallback from first redirect host
   if (hosts[0]) {
     return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hosts[0])}&sz=128`;
   }
@@ -67,7 +127,16 @@ export default function AuthorizePage({
   return (
     <Suspense
       fallback={
-        <p style={{ padding: 24, fontFamily: "system-ui", color: "#BDBDBD", background: "#000" }}>
+        <p
+          style={{
+            padding: 24,
+            fontFamily: "system-ui",
+            color: "#BDBDBD",
+            background: "#050507",
+            minHeight: "100vh",
+            margin: 0,
+          }}
+        >
           Loading…
         </p>
       }
