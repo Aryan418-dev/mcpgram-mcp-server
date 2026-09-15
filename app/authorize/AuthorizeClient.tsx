@@ -14,23 +14,53 @@ type Props = {
 
 type Workspace = { id: string; name: string };
 
-/** Inline vector mark — always sharp, no network, transparent bg for dark tiles */
-function McpgramLogoMark({ size = 34 }: { size?: number }) {
+/** Original MCPGRAM logos (hosted on this app) — prefer white mark for dark UI */
+const MCPGRAM_LOGO_SOURCES = [
+  "/White-logo.png",
+  "/white-logo.png",
+  "/icon-512.png",
+  "/logo-on-dark.png",
+  "/icon.png",
+  "/apple-touch-icon.png",
+];
+
+function McpgramLogo({ size = 34 }: { size?: number }) {
+  const [idx, setIdx] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  if (failed || idx >= MCPGRAM_LOGO_SOURCES.length) {
+    return (
+      <span
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 10,
+          background: "linear-gradient(145deg, #cffe25 0%, #84cc16 100%)",
+          color: "#0a0a0c",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 700,
+          fontSize: Math.round(size * 0.4),
+        }}
+      >
+        M
+      </span>
+    );
+  }
+
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 64 64"
+    <img
+      src={MCPGRAM_LOGO_SOURCES[idx]}
+      alt="MCPGRAM"
       width={size}
       height={size}
-      role="img"
-      aria-label="MCPGRAM"
-      style={{ display: "block" }}
-    >
-      <rect x="8" y="8" width="20" height="20" rx="5" fill="#cffe25" />
-      <rect x="36" y="8" width="20" height="20" rx="5" fill="#cffe25" opacity="0.78" />
-      <rect x="8" y="36" width="20" height="20" rx="5" fill="#cffe25" opacity="0.78" />
-      <rect x="36" y="36" width="20" height="20" rx="5" fill="#cffe25" />
-    </svg>
+      style={{ display: "block", objectFit: "contain" }}
+      onError={() => {
+        if (idx + 1 < MCPGRAM_LOGO_SOURCES.length) setIdx(idx + 1);
+        else setFailed(true);
+      }}
+    />
   );
 }
 
@@ -86,7 +116,6 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
     setAccessToken(session?.access_token ?? null);
   }
 
-  /** Always prefer a fresh session token right before API calls */
   async function resolveToken(): Promise<string | null> {
     if (accessToken && accessToken.length > 20) return accessToken;
     try {
@@ -395,7 +424,7 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
             </div>
 
             <div style={styles.logoBox} title="MCPGRAM">
-              <McpgramLogoMark />
+              <McpgramLogo size={34} />
             </div>
           </div>
         </div>
@@ -611,29 +640,30 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
                       style={styles.btnSecondary}
                       disabled={busy}
                       onClick={() => {
-                        window.location.href = params.redirect_uri
-                          ? `${params.redirect_uri}${params.redirect_uri.includes("?") ? "&" : "?"}error=access_denied${params.state ? `&state=${encodeURIComponent(params.state)}` : ""}`
-                          : "/";
+                        getClient().auth.signOut({ scope: "local" });
+                        setUser(null);
+                        setAccessToken(null);
+                        setWorkspaces([]);
+                        setSelected({});
+                        setError(null);
                       }}
                     >
-                      Cancel
+                      Sign out
                     </button>
                   </>
                 )}
               </div>
+
+              {error ? (
+                <p style={{ marginTop: 14, color: "#f87171", fontSize: 13, textAlign: "center" }}>
+                  {error}
+                </p>
+              ) : null}
             </>
           )}
 
-          {error ? (
-            <p
-              style={{
-                marginTop: 16,
-                fontSize: 13,
-                color: "#f87171",
-                textAlign: "center",
-                wordBreak: "break-word",
-              }}
-            >
+          {!user && error ? (
+            <p style={{ marginTop: 14, color: "#f87171", fontSize: 13, textAlign: "center" }}>
               {error}
             </p>
           ) : null}
