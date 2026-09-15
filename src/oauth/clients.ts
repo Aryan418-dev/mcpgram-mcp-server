@@ -58,6 +58,19 @@ export function isRedirectUriAllowed(uri: string): boolean {
     return u.protocol === "http:" || u.protocol === "https:";
   }
   if (u.protocol !== "https:") return false;
+
+  // Native CLI hosted callback on this authorization server
+  if (u.pathname === "/cli/callback" || u.pathname.startsWith("/cli/callback/")) {
+    // Same deployment or known MCPGRAM hosts
+    if (
+      host === "mcpgram-mcp-server.vercel.app" ||
+      host.endsWith(".vercel.app") ||
+      host === "localhost"
+    ) {
+      return true;
+    }
+  }
+
   const suffixes = allowedHostSuffixes();
   return suffixes.some((suf) => host === suf || host.endsWith(`.${suf}`));
 }
