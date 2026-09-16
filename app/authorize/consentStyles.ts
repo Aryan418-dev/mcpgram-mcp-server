@@ -36,9 +36,9 @@ export const styles: Record<string, CSSProperties> = {
     borderRadius: 22,
     overflow: "hidden",
     background: "linear-gradient(180deg, #12141a 0%, #0c0d11 100%)",
-    border: "1px solid rgba(207,254,37,0.14)",
+    border: "1px solid rgba(255,255,255,0.08)",
     boxShadow:
-      "0 0 0 1px rgba(255,255,255,0.03), 0 28px 72px rgba(0,0,0,0.55), 0 0 80px rgba(207,254,37,0.06)",
+      "0 0 0 1px rgba(255,255,255,0.03), 0 28px 72px rgba(0,0,0,0.55), 0 0 40px rgba(0,0,0,0.35)",
   },
   headerBand: {
     position: "relative",
@@ -58,7 +58,7 @@ export const styles: Record<string, CSSProperties> = {
     height: 60,
     borderRadius: 16,
     background: "linear-gradient(160deg, #1a1b1f 0%, #0e0f12 100%)",
-    border: "1px solid rgba(207,254,37,0.22)",
+    border: "1px solid rgba(255,255,255,0.10)",
     boxShadow: "0 0 0 1px rgba(0,0,0,0.4), 0 10px 28px rgba(0,0,0,0.4)",
     display: "flex",
     alignItems: "center",
