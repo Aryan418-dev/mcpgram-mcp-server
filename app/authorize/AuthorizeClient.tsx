@@ -431,11 +431,11 @@ export function AuthorizeClient({ supabaseUrl, supabaseAnonKey, clientName, clie
 
         <div style={styles.body}>
           <h1 style={styles.title}>
-            {success ? "You're connected" : `Connect ${appName} to MCPGRAM`}
+            {success ? "Successfully Connected" : `Connect ${appName} to MCPGRAM`}
           </h1>
           <p style={styles.subtitle}>
             {success
-              ? `${appName} can now securely access your MCPGRAM workspace.`
+              ? `${appName} can now securely access your MCPGRAM workspace. You can close this window.`
               : `Choose which workspaces ${appName} can access.`}
           </p>
 
